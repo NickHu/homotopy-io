@@ -1,0 +1,13 @@
+{
+  "name": "homotopy-core",
+  "version": "0.1.0",
+  "scripts": {
+    "preinstall": "git config core.hooksPath .githooks",
+    "build": "spago build",
+    "watch": "spago build -w -l"
+  },
+  "license": "MIT",
+  "devDependencies": {
+    "purty": "^6.2.0"
+  }
+}

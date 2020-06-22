@@ -1,0 +1,13 @@
+#!/bin/sh
+FILES=$(git diff --cached --name-only --diff-filter=ACMR "*.purs" | sed 's| |\\ |g')
+[ -z "$FILES" ] && exit 0
+
+# Run purty on all purescript files
+for f in $FILES
+do ./node_modules/.bin/purty "$f" --write
+done
+
+# Stage the modified files back to the index
+echo "$FILES" | xargs git add
+
+exit 0
