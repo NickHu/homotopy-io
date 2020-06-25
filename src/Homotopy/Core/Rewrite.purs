@@ -1,25 +1,35 @@
-module Limit where
+module Homotopy.Core.Rewrite where
 
 import Data.List (List(..), drop, findMap, length, take, (!!), (..), (:))
 import Data.Maybe (fromJust)
 import Prelude (class Eq, class Semigroup, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
-import Generator (Generator)
+import Homotopy.Core.Generator (Generator)
 
-data Limit
-  = Limit0 { sourceGenerator :: Generator, targetGenerator :: Generator }
-  | LimitI
-  | LimitN { dimension :: Int, cones :: List Cone }
+-- | An n-dimensional rewrite is a sparsely encoded transformation of
+-- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
+-- | insert degenerate levels.
+data Rewrite
+  = Rewrite0 { source :: Generator, target :: Generator }
+  | RewriteI
+  | RewriteN { dimension :: Int, cones :: List Cone }
 
-derive instance eqLimit :: Eq Limit
+derive instance eqRewrite :: Eq Rewrite
 
+-- | A pair of a forward rewrite and a backward rewrite.
+-- |
+-- | Cospans of rewrites can encode the action of a generator by contracting
+-- | the source and target subdiagrams to a point labelled with that generator.
+-- | By contracting some levels of the shape of two diagrams such that
+-- | non-trivial parts of a diagram are merged with surrounding identity parts,
+-- | cospans of rewrites also encode homotopies.
 type Cospan
-  = { forwardLimit :: Limit, backwardLimit :: Limit }
+  = { forward :: Rewrite, backward :: Rewrite }
 
 type Cone
   = { index :: Int
     , source :: List Cospan
     , target :: Cospan
-    , slices :: List Limit
+    , slices :: List Rewrite
     }
 
 data Height
@@ -31,42 +41,42 @@ data SliceIndex
   | Source
   | Target
 
-identity :: Int -> Limit
-identity 0 = LimitI
+identity :: Int -> Rewrite
+identity 0 = RewriteI
 
-identity dim = LimitN { dimension: dim, cones: Nil }
+identity dim = RewriteN { dimension: dim, cones: Nil }
 
-dimension :: Limit -> Int
-dimension (Limit0 _) = 0
+dimension :: Rewrite -> Int
+dimension (Rewrite0 _) = 0
 
-dimension LimitI = 0
+dimension RewriteI = 0
 
-dimension (LimitN { dimension: dim }) = dim
+dimension (RewriteN { dimension: dim }) = dim
 
 coneSize :: Cone -> Int
 coneSize { source } = length source
 
-slice :: Partial => Limit -> Int -> Limit
-slice (LimitN { dimension: dim, cones }) height =
+slice :: Partial => Rewrite -> Int -> Rewrite
+slice (RewriteN { dimension: dim, cones }) height =
   fromJust
     $ findMap (\c -> c.slices !! (height - c.index)) cones
 
-targets :: Partial => Limit -> List Int
-targets (LimitN { dimension: dim, cones }) = go cones 0
+targets :: Partial => Rewrite -> List Int
+targets (RewriteN { dimension: dim, cones }) = go cones 0
   where
   go :: List Cone -> Int -> List Int
   go Nil _ = Nil
 
   go (c : cs) i = (c.index + i) : go cs (i - length c.source + 1)
 
-pad :: List Int -> Limit -> Limit
-pad p (LimitN { dimension: dim, cones: cs }) =
-  LimitN
+pad :: List Int -> Rewrite -> Rewrite
+pad p (RewriteN { dimension: dim, cones: cs }) =
+  RewriteN
     { dimension: dim
     , cones: map (conePad p) cs
     }
 
-pad _ limit = limit
+pad _ rewrite = rewrite
 
 conePad :: List Int -> Cone -> Cone
 conePad Nil cone = cone
@@ -79,13 +89,13 @@ conePad (p : ps) cone =
   }
 
 cospanPad :: List Int -> Cospan -> Cospan
-cospanPad p { forwardLimit: fw, backwardLimit: bw } =
-  { forwardLimit: pad p fw
-  , backwardLimit: pad p bw
+cospanPad p { forward: fw, backward: bw } =
+  { forward: pad p fw
+  , backward: pad p bw
   }
 
-singularImage :: Partial => Limit -> Int -> Int
-singularImage (LimitN { cones }) h = go 0 cones
+singularImage :: Partial => Rewrite -> Int -> Int
+singularImage (RewriteN { cones }) h = go 0 cones
   where
   go :: Int -> List Cone -> Int
   go i Nil = h + i
@@ -95,8 +105,8 @@ singularImage (LimitN { cones }) h = go 0 cones
     | h < c.index + coneSize c = c.index + i
     | otherwise = go (i + 1 - coneSize c) cs
 
-singularPreimage :: Partial => Limit -> Int -> List Int
-singularPreimage (LimitN { cones }) h = go 0 cones
+singularPreimage :: Partial => Rewrite -> Int -> List Int
+singularPreimage (RewriteN { cones }) h = go 0 cones
   where
   go :: Int -> List Cone -> List Int
   go i Nil = (h - i) : Nil
@@ -106,8 +116,8 @@ singularPreimage (LimitN { cones }) h = go 0 cones
     | h == c.index + i = c.index .. (c.index + coneSize c)
     | otherwise = go (i + 1 - coneSize c) cs
 
-regularImage :: Partial => Limit -> Int -> Int
-regularImage (LimitN { cones }) h = go 0 cones
+regularImage :: Partial => Rewrite -> Int -> Int
+regularImage (RewriteN { cones }) h = go 0 cones
   where
   go :: Int -> List Cone -> Int
   go i Nil = h - i
@@ -116,7 +126,7 @@ regularImage (LimitN { cones }) h = go 0 cones
     | h < c.index + i = h - i
     | otherwise = go (i + 1 - coneSize c) cs
 
-regularPreimage :: Partial => Limit -> Int -> List Int
+regularPreimage :: Partial => Rewrite -> Int -> List Int
 regularPreimage lim h =
   let
     left = singularImage lim (h - 1)
@@ -125,7 +135,7 @@ regularPreimage lim h =
   in
     (left + 1) .. (right + 1)
 
-transportCoordinates :: Partial => Limit -> List SliceIndex -> List (List SliceIndex)
+transportCoordinates :: Partial => Rewrite -> List SliceIndex -> List (List SliceIndex)
 transportCoordinates _ Nil = Nil : Nil
 
 transportCoordinates _ points@(Source : _) = points : Nil
@@ -142,11 +152,17 @@ transportCoordinates lim (Height (Regular p) : ps) =
     (\h -> Height (Regular h) : ps)
     $ regularPreimage lim p
 
-instance limitSemigroup :: Partial => Semigroup Limit where
-  append (Limit0 { sourceGenerator: fs, targetGenerator: ft }) (Limit0 { sourceGenerator: gs, targetGenerator: gt })
-    | ft == gs = Limit0 { sourceGenerator: fs, targetGenerator: gt }
-  append (LimitN { dimension: fd, cones: fcs }) (LimitN { dimension: gd, cones: gcs })
-    | fd == gd = LimitN { dimension: fd, cones: composeCones 0 fcs gcs }
+-- | Composition of rewrites.
+-- |
+-- | Rewrites of the same dimension and with given source and target diagrams
+-- | form a category. In this library, rewrites do not specify their source,
+-- | target or dimension in their type or at runtime, so the category of
+-- | rewrites is instead presented as a partial semigroup.
+instance rewriteSemigroup :: Partial => Semigroup Rewrite where
+  append (Rewrite0 { source: fs, target: ft }) (Rewrite0 { source: gs, target: gt })
+    | ft == gs = Rewrite0 { source: fs, target: gt }
+  append (RewriteN { dimension: fd, cones: fcs }) (RewriteN { dimension: gd, cones: gcs })
+    | fd == gd = RewriteN { dimension: fd, cones: composeCones 0 fcs gcs }
       where
       composeCones :: Int -> List Cone -> List Cone -> List Cone
       composeCones _ cs Nil = cs
