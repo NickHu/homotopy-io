@@ -3,7 +3,7 @@ module Homotopy.Core.Rewrite where
 import Data.List (List(..), drop, findMap, length, take, (!!), (..), (:))
 import Data.Maybe (fromJust)
 import Prelude (class Eq, class Semigroup, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
-import Homotopy.Core.Generator (Generator)
+import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator())
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -31,15 +31,6 @@ type Cone
     , target :: Cospan
     , slices :: List Rewrite
     }
-
-data Height
-  = Regular Int
-  | Singular Int
-
-data SliceIndex
-  = Height Height
-  | Source
-  | Target
 
 identity :: Int -> Rewrite
 identity 0 = RewriteI
@@ -138,18 +129,16 @@ regularPreimage lim h =
 transportCoordinates :: Partial => Rewrite -> List SliceIndex -> List (List SliceIndex)
 transportCoordinates _ Nil = Nil : Nil
 
-transportCoordinates _ points@(Source : _) = points : Nil
+transportCoordinates _ points@(Boundary _ : _) = points : Nil
 
-transportCoordinates _ points@(Target : _) = points : Nil
-
-transportCoordinates lim (Height (Singular p) : ps) =
+transportCoordinates lim (Interior (Singular p) : ps) =
   map
-    (Height (Singular (singularImage lim p)) : _)
+    (Interior (Singular (singularImage lim p)) : _)
     $ transportCoordinates (slice lim p) ps
 
-transportCoordinates lim (Height (Regular p) : ps) =
+transportCoordinates lim (Interior (Regular p) : ps) =
   map
-    (\h -> Height (Regular h) : ps)
+    (\h -> Interior (Regular h) : ps)
     $ regularPreimage lim p
 
 -- | Composition of rewrites.

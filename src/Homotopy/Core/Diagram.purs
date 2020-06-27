@@ -18,8 +18,8 @@ module Homotopy.Core.Diagram
 import Data.Foldable (length, maximum)
 import Data.List (List(..), concatMap, drop, last, scanl, tail, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromJust)
-import Homotopy.Core.Generator (Generator)
-import Homotopy.Core.Rewrite (Cone, Cospan, Height(..), Rewrite(..), SliceIndex(..), coneSize)
+import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize)
+import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator())
 import Partial.Unsafe (unsafePartial)
 import Prelude (class Eq, map, otherwise, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=))
 
@@ -160,16 +160,16 @@ everyOther (x : Nil) = x : Nil
 everyOther (x : _ : xs) = x : everyOther xs
 
 internalizeHeight :: Diagram -> SliceIndex -> Maybe Height
-internalizeHeight _ Source = Just (Regular 0)
+internalizeHeight _ (Boundary Source) = Just (Regular 0)
 
-internalizeHeight d Target = Just (Regular (size d))
+internalizeHeight d (Boundary Target) = Just (Regular (size d))
 
-internalizeHeight d (Height (Regular h))
+internalizeHeight d (Interior (Regular h))
   | h < 0 = Nothing
   | h > size d = Nothing
   | otherwise = Just (Regular h)
 
-internalizeHeight d (Height (Singular h))
+internalizeHeight d (Interior (Singular h))
   | h < 0 = Nothing
   | h >= size d = Nothing
   | otherwise = Just (Singular h)
