@@ -15,14 +15,16 @@ module Homotopy.Core.Diagram
   , internalizeHeight
   , checkEmbedding
   , enumerateEmbeddings
+  , attach
   ) where
 
 import Control.MonadPlus (guard)
 import Data.Foldable (length, maximum)
-import Data.List (List(..), concatMap, drop, head, last, mapWithIndex, scanl, tail, take, (!!), (:))
+import Data.List (List(..), concatMap, drop, head, last, mapWithIndex, reverse, scanl, tail, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
+import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
-import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad)
+import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse)
 import Partial.Unsafe (unsafePartial)
 import Prelude (class Eq, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=))
 
@@ -238,3 +240,48 @@ enumerateEmbeddings needle haystack =
   -- | Enumerate the embeddings of a diagram into the regular slices of the `haystack`.
   enumerateSliceEmbeddings :: Partial => Diagram -> List Embedding
   enumerateSliceEmbeddings needle' = join $ mapWithIndex (\i slice -> map ((:) i) (enumerateEmbeddings needle' slice)) $ regularSlices haystack
+
+attach :: Boundary -> Embedding -> Diagram -> Diagram -> Maybe Diagram
+attach _ _ (Diagram0 _) _ = Nothing
+
+attach _ _ _ (Diagram0 _) = Nothing
+
+attach boundary embedding small large = unsafePartial $ go (dimension large - dimension small) boundary
+  where
+  go :: Partial => Int -> Boundary -> Maybe Diagram
+  go depth _
+    | depth < 0 = Nothing
+
+  go 0 Source = do
+    guard (checkEmbedding embedding (target small) (source large))
+    let
+      cospansPadded = map (cospanPad embedding) (cospans small)
+    pure
+      $ DiagramN
+          { source: rewriteBackwards cospansPadded (source large)
+          , cospans: cospansPadded <> cospans large
+          }
+
+  go 0 Target = do
+    guard (checkEmbedding embedding (source small) (target large))
+    let
+      cospansPadded = map (cospanPad embedding) (cospans small)
+    pure
+      $ DiagramN
+          { source: source large
+          , cospans: cospans large <> cospansPadded
+          }
+
+  go depth Source = do
+    source_ <- attach boundary embedding small (source large)
+    pure $ DiagramN { source: source_, cospans: map (padDepth depth (size small)) (cospans large) }
+
+  go _ Target = do
+    source_ <- attach boundary embedding small (source large)
+    pure $ DiagramN { source: source_, cospans: cospans large }
+
+  padDepth :: Int -> Int -> Cospan -> Cospan
+  padDepth depth pad cospan = cospanPad (replicate (depth - 1) 0 <> (pad : Nil)) cospan
+
+  rewriteBackwards :: List Cospan -> Diagram -> Diagram
+  rewriteBackwards cospans_ diagram = unsafePartial $ target $ DiagramN { source: diagram, cospans: reverse $ map cospanReverse cospans_ }

@@ -85,6 +85,9 @@ cospanPad p { forward: fw, backward: bw } =
   , backward: pad p bw
   }
 
+cospanReverse :: Cospan -> Cospan
+cospanReverse cospan = { forward: cospan.backward, backward: cospan.forward }
+
 singularImage :: Partial => Rewrite -> Int -> Int
 singularImage (RewriteN { cones }) h = go 0 cones
   where
