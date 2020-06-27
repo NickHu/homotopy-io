@@ -5,7 +5,7 @@ module Homotopy.Core.Common
   , Boundary(..)
   ) where
 
-import Prelude (class Eq, class Ord)
+import Prelude (class Eq, class Ord, compare, (*), (+))
 
 newtype Generator
   = Generator { id :: Int, dimension :: Int }
@@ -19,6 +19,13 @@ data Height
   | Singular Int
 
 derive instance eqHeight :: Eq Height
+
+instance ordHeight :: Ord Height where
+  compare a b = compare (toInt a) (toInt b)
+    where
+    toInt (Regular i) = i * 2
+
+    toInt (Singular i) = i * 2 + 1
 
 data SliceIndex
   = Interior Height
