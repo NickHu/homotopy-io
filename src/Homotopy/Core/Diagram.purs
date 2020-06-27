@@ -13,15 +13,18 @@ module Homotopy.Core.Diagram
   , singularSlices
   , regularSlices
   , internalizeHeight
+  , checkEmbedding
+  , enumerateEmbeddings
   ) where
 
+import Control.MonadPlus (guard)
 import Data.Foldable (length, maximum)
-import Data.List (List(..), concatMap, drop, last, scanl, tail, take, (!!), (:))
-import Data.Maybe (Maybe(..), fromJust)
-import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize)
-import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator())
+import Data.List (List(..), concatMap, drop, head, last, mapWithIndex, scanl, tail, take, (!!), (:))
+import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
+import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
+import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad)
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, map, otherwise, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=))
+import Prelude (class Eq, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=))
 
 -- | A diagram is either 0-dimensional, in which case it consists of a
 -- | generator, or n-dimensional (for n > 0), in which case it has a source
@@ -134,12 +137,12 @@ slices d = scanl (\s r -> r s) (source d) $ concatMap genRewrites $ cospans d
 
 -- | The slice of an (n + 1)-dimensional diagram at a particular height.
 -- |
--- | Fails when the diagram is 0-dimensional or the index is out of bounds.
-sliceAt :: Partial => Diagram -> SliceIndex -> Diagram
-sliceAt d i = fromJust $ slices d !! heightToIndex (internalHeight)
+-- | Fails when the diagram is 0-dimensional or returns `Nothing` when the index is out of bounds.
+sliceAt :: Partial => Diagram -> SliceIndex -> Maybe Diagram
+sliceAt d@(DiagramN _) i = do
+  height <- internalizeHeight d i
+  slices d !! heightToIndex height
   where
-  internalHeight = fromJust (internalizeHeight d i)
-
   heightToIndex (Singular h) = h * 2 + 1
 
   heightToIndex (Regular h) = h * 2
@@ -173,3 +176,65 @@ internalizeHeight d (Interior (Singular h))
   | h < 0 = Nothing
   | h >= size d = Nothing
   | otherwise = Just (Singular h)
+
+type Embedding
+  = List Int
+
+checkCospanEmbedding :: Embedding -> List Cospan -> List Cospan -> Boolean
+checkCospanEmbedding embedding needle haystack = needleCospans == haystackCospans
+  where
+  height = fromMaybe 0 (head embedding)
+
+  rest = fromMaybe Nil (tail embedding)
+
+  haystackCospans = take (length needle) $ drop height haystack
+
+  needleCospans = map (cospanPad rest) needle
+
+-- | Check whether a diagram embeds into another using a given embedding.
+checkEmbedding ::
+  Embedding ->
+  Diagram ->
+  Diagram ->
+  Boolean
+checkEmbedding _ (Diagram0 needle) (Diagram0 haystack) = needle == haystack
+
+checkEmbedding _ _ (Diagram0 _) = false
+
+checkEmbedding embedding needle haystack =
+  unsafePartial
+    $ case compare (dimension needle) (dimension haystack) of
+        LT -> maybe false (checkEmbedding rest needle) (sliceAt haystack height)
+        EQ ->
+          maybe false (checkEmbedding rest (source needle)) (sliceAt haystack height)
+            && checkCospanEmbedding embedding (cospans needle) (cospans haystack)
+        GT -> false
+  where
+  height = Interior (Regular (fromMaybe 0 (head embedding)))
+
+  rest = fromMaybe Nil (tail embedding)
+
+-- | Enumerate the embeddings of one diagram into another.
+enumerateEmbeddings ::
+  Diagram ->
+  Diagram ->
+  List Embedding
+enumerateEmbeddings (Diagram0 needle) (Diagram0 haystack)
+  | needle == haystack = Nil : Nil
+  | otherwise = Nil
+
+enumerateEmbeddings _ (Diagram0 _) = Nil
+
+enumerateEmbeddings needle haystack =
+  unsafePartial
+    $ case compare (dimension needle) (dimension haystack) of
+        LT -> enumerateSliceEmbeddings needle
+        EQ -> do
+          embedding <- enumerateSliceEmbeddings (source needle)
+          guard (checkCospanEmbedding embedding (cospans needle) (cospans haystack))
+          pure embedding
+        GT -> Nil
+  where
+  -- | Enumerate the embeddings of a diagram into the regular slices of the `haystack`.
+  enumerateSliceEmbeddings :: Partial => Diagram -> List Embedding
+  enumerateSliceEmbeddings needle' = join $ mapWithIndex (\i slice -> map ((:) i) (enumerateEmbeddings needle' slice)) $ regularSlices haystack
