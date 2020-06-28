@@ -1,10 +1,10 @@
 module Homotopy.Core.Diagram
-  ( Diagram
+  ( Diagram(..)
+  , DiagramN
   , identity
   , dimension
   , size
   , cospans
-  , toGenerator
   , fromGenerator
   , source
   , target
@@ -19,96 +19,92 @@ module Homotopy.Core.Diagram
   ) where
 
 import Control.MonadPlus (guard)
-import Data.Foldable (length, maximum)
+import Data.Foldable (length)
 import Data.List (List(..), concatMap, drop, head, last, mapWithIndex, reverse, scanl, tail, take, (!!), (:))
 import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
 import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
 import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse)
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=))
+import Prelude (class Eq, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>))
 
 -- | A diagram is either 0-dimensional, in which case it consists of a
 -- | generator, or n-dimensional (for n > 0), in which case it has a source
 -- | $n-1$ diagram a list of (n - 1) cospans
 data Diagram
   = Diagram0 Generator
-  | DiagramN { source :: Diagram, cospans :: List Cospan }
+  | DiagramN DiagramN
+
+newtype DiagramN
+  = InternalDiagram { source :: Diagram, cospans :: List Cospan }
+
+unsafeMake :: Diagram -> List Cospan -> DiagramN
+unsafeMake s cs = InternalDiagram { source: s, cospans: cs }
+
+toDiagramN :: Partial => Diagram -> DiagramN
+toDiagramN (DiagramN d) = d
 
 -- | Promotes an n-dimensional diagram to an (n + 1)-dimensional diagram with
 -- | the original diagram as its unique regular slice.
-identity :: Diagram -> Diagram
-identity d = DiagramN { source: d, cospans: Nil }
+identity :: Diagram -> DiagramN
+identity d = unsafeMake d Nil
 
 -- | Every diagram has a dimension
 dimension :: Diagram -> Int
 dimension (Diagram0 _) = 0
 
-dimension (DiagramN { source: s }) = 1 + dimension s
+dimension (DiagramN d) = 1 + dimension (source d)
 
 -- | Every non-zero-dimensional diagram has a list of cospans.
-cospans :: Partial => Diagram -> List Cospan
-cospans (DiagramN { cospans: cs }) = cs
+cospans :: DiagramN -> List Cospan
+cospans (InternalDiagram d) = d.cospans
 
--- | The size of a diagram in the top dimension. For (n + 1)-dimensional
--- | diagrams this is the number of cospans or equivalently the number of
--- | singular slices. The size of a 0-dimensional diagram is always 1.
-size :: Diagram -> Int
-size (Diagram0 _) = 1
-
-size (DiagramN { cospans: cs }) = length cs
+-- | The size of a diagram in the top dimension. This is the number of cospans
+-- | or equivalently the number of singular slices. 
+size :: DiagramN -> Int
+size = cospans >>> length
 
 instance eqDiagram :: Eq Diagram where
   eq (Diagram0 g) (Diagram0 g') = g == g'
-  eq (DiagramN d) (DiagramN d') = d.source == d'.source && d.cospans == d.cospans
+  eq (DiagramN d) (DiagramN d') = d == d'
   eq _ _ = false
 
--- | The maximum dimensional generator of a diagram.
-toGenerator :: Diagram -> Generator
-toGenerator (Diagram0 g) = g
+instance eqDiagramN :: Eq DiagramN where
+  eq (InternalDiagram d) (InternalDiagram d') = d.source == d'.source && d.cospans == d'.cospans
 
-toGenerator d = unsafePartial $ fromJust $ maximum $ map toGenerator $ slices d
-
--- | Creates a new diagram for a generator.
--- |
--- | When n-dimensional source and target diagrams are given, an
--- | (n + 1)-dimensional diagram is created in which the specified generator
--- | transforms the source into the target diagram.  When no boundary is given,
--- | a 0-dimensional diagram is created instead.
-fromGenerator :: Maybe { source :: Diagram, target :: Diagram } -> Generator -> Diagram
-fromGenerator Nothing generator = Diagram0 generator
-
-fromGenerator (Just { source: s, target: t }) generator = DiagramN { source: s, cospans: cospan : Nil }
+-- | Creates a new diagram for a generator with a specified source and target.
+fromGenerator :: Diagram -> Diagram -> Generator -> DiagramN
+fromGenerator s t generator = unsafeMake s (cospan : Nil)
   where
   cospan = { forward: rewriteCone generator s, backward: rewriteCone generator t }
 
   rewriteCone :: Generator -> Diagram -> Rewrite
   rewriteCone g (Diagram0 base) = Rewrite0 { source: base, target: g }
 
-  rewriteCone g base@(DiagramN { cospans: cs }) =
+  rewriteCone g (DiagramN base) =
     RewriteN
-      { dimension: dimension base
+      { dimension: dimension (DiagramN base)
       , cones:
           ( { index: 0
-            , source: cs
-            , target: { forward: rewriteCone g (unsafePartial (source base)), backward: rewriteCone g (unsafePartial (target base)) }
-            , slices: map (\sl -> rewriteCone g sl) $ unsafePartial $ singularSlices base
+            , source: cospans base
+            , target: { forward: rewriteCone g (source base), backward: rewriteCone g (target base) }
+            , slices: map (\sl -> rewriteCone g sl) $ singularSlices base
             }
               : Nil
           )
       }
 
 -- | The source slice of an (n + 1)-dimensional diagram.
-source :: Partial => Diagram -> Diagram
-source (DiagramN { source: s }) = s
+source :: DiagramN -> Diagram
+source (InternalDiagram d) = d.source
 
 -- | The target slice of an (n + 1)-dimensional diagram.
-target :: Partial => Diagram -> Diagram
-target d = fromJust $ last $ slices d
+target :: DiagramN -> Diagram
+target d = unsafePartial $ fromJust $ last $ slices d
 
 -- | The list of all the slices of an (n + 1)-dimensional diagram.
-slices :: Partial => Diagram -> List Diagram
-slices d = scanl (\s r -> r s) (source d) $ concatMap genRewrites $ cospans d
+slices :: DiagramN -> List Diagram
+slices d = unsafePartial $ scanl (\s r -> r s) (source d) $ concatMap genRewrites $ cospans d
   where
   genRewrites :: Partial => Cospan -> List (Diagram -> Diagram)
   genRewrites { forward: fw, backward: bw } = rewriteForward fw : rewriteBackward bw : Nil
@@ -118,19 +114,19 @@ slices d = scanl (\s r -> r s) (source d) $ concatMap genRewrites $ cospans d
 
   rewriteForward RewriteI (Diagram0 g) = Diagram0 g
 
-  rewriteForward (RewriteN { cones }) (DiagramN d') = DiagramN { source: d'.source, cospans: go d'.cospans 0 cones }
+  rewriteForward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
     where
     go :: List Cospan -> Int -> List Cone -> List Cospan
     go cspans _ Nil = cspans
 
     go cspans i (c : cs) = go (take (c.index + i) cspans <> c.target : drop (c.index + i + coneSize c) cspans) (i - coneSize c + 1) cs
 
-  rewriteBackward :: Rewrite -> Diagram -> Diagram
+  rewriteBackward :: Partial => Rewrite -> Diagram -> Diagram
   rewriteBackward (Rewrite0 rewrite) (Diagram0 _) = Diagram0 rewrite.source
 
   rewriteBackward RewriteI (Diagram0 g) = Diagram0 g
 
-  rewriteBackward (RewriteN { cones }) (DiagramN d') = DiagramN { source: d'.source, cospans: go d'.cospans 0 cones }
+  rewriteBackward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
     where
     go :: List Cospan -> Int -> List Cone -> List Cospan
     go cspans _ Nil = cspans
@@ -138,10 +134,8 @@ slices d = scanl (\s r -> r s) (source d) $ concatMap genRewrites $ cospans d
     go cspans i (c : cs) = go (take (c.index + i) cspans <> c.source <> drop (c.index + i + 1) cspans) (i + coneSize c - 1) cs
 
 -- | The slice of an (n + 1)-dimensional diagram at a particular height.
--- |
--- | Fails when the diagram is 0-dimensional or returns `Nothing` when the index is out of bounds.
-sliceAt :: Partial => Diagram -> SliceIndex -> Maybe Diagram
-sliceAt d@(DiagramN _) i = do
+sliceAt :: DiagramN -> SliceIndex -> Maybe Diagram
+sliceAt d i = do
   height <- internalizeHeight d i
   slices d !! heightToIndex height
   where
@@ -150,11 +144,11 @@ sliceAt d@(DiagramN _) i = do
   heightToIndex (Regular h) = h * 2
 
 -- | The list of the singular slices of an (n + 1)-dimensional diagram.
-singularSlices :: Partial => Diagram -> List Diagram
-singularSlices d = everyOther (fromJust $ tail (slices d))
+singularSlices :: DiagramN -> List Diagram
+singularSlices d = unsafePartial $ everyOther $ fromJust $ tail (slices d)
 
 -- | The list of the regular slices of an (n + 1)-dimensional diagram.
-regularSlices :: Partial => Diagram -> List Diagram
+regularSlices :: DiagramN -> List Diagram
 regularSlices d = everyOther (slices d)
 
 everyOther :: forall a. List a -> List a
@@ -164,7 +158,7 @@ everyOther (x : Nil) = x : Nil
 
 everyOther (x : _ : xs) = x : everyOther xs
 
-internalizeHeight :: Diagram -> SliceIndex -> Maybe Height
+internalizeHeight :: DiagramN -> SliceIndex -> Maybe Height
 internalizeHeight _ (Boundary Source) = Just (Regular 0)
 
 internalizeHeight d (Boundary Target) = Just (Regular (size d))
@@ -194,23 +188,17 @@ checkCospanEmbedding embedding needle haystack = needleCospans == haystackCospan
   needleCospans = map (cospanPad rest) needle
 
 -- | Check whether a diagram embeds into another using a given embedding.
-checkEmbedding ::
-  Embedding ->
-  Diagram ->
-  Diagram ->
-  Boolean
-checkEmbedding _ (Diagram0 needle) (Diagram0 haystack) = needle == haystack
-
-checkEmbedding _ _ (Diagram0 _) = false
-
-checkEmbedding embedding needle haystack =
-  unsafePartial
-    $ case compare (dimension needle) (dimension haystack) of
-        LT -> maybe false (checkEmbedding rest needle) (sliceAt haystack height)
-        EQ ->
-          maybe false (checkEmbedding rest (source needle)) (sliceAt haystack height)
-            && checkCospanEmbedding embedding (cospans needle) (cospans haystack)
-        GT -> false
+checkEmbedding :: Embedding -> Diagram -> Diagram -> Boolean
+checkEmbedding embedding n h = case n, h of
+  Diagram0 needle, Diagram0 haystack -> needle == haystack
+  DiagramN _, Diagram0 _ -> false
+  needle@(Diagram0 _), DiagramN haystack -> maybe false (checkEmbedding rest needle) (sliceAt haystack height)
+  DiagramN needle, DiagramN haystack -> case compare (dimension $ DiagramN needle) (dimension $ DiagramN haystack) of
+    LT -> maybe false (checkEmbedding rest (DiagramN needle)) (sliceAt haystack height)
+    EQ ->
+      maybe false (checkEmbedding rest (source needle)) (sliceAt haystack height)
+        && checkCospanEmbedding embedding (cospans needle) (cospans haystack)
+    GT -> false
   where
   height = Interior (Regular (fromMaybe 0 (head embedding)))
 
@@ -221,34 +209,27 @@ enumerateEmbeddings ::
   Diagram ->
   Diagram ->
   List Embedding
-enumerateEmbeddings (Diagram0 needle) (Diagram0 haystack)
-  | needle == haystack = Nil : Nil
-  | otherwise = Nil
-
-enumerateEmbeddings _ (Diagram0 _) = Nil
-
-enumerateEmbeddings needle haystack =
-  unsafePartial
-    $ case compare (dimension needle) (dimension haystack) of
-        LT -> enumerateSliceEmbeddings needle
-        EQ -> do
-          embedding <- enumerateSliceEmbeddings (source needle)
-          guard (checkCospanEmbedding embedding (cospans needle) (cospans haystack))
-          pure embedding
-        GT -> Nil
+enumerateEmbeddings n h = case n, h of
+  Diagram0 needle, Diagram0 haystack
+    | needle == haystack -> Nil : Nil
+    | otherwise -> Nil
+  DiagramN _, Diagram0 _ -> Nil
+  Diagram0 needle, DiagramN haystack -> enumerateSliceEmbeddings (Diagram0 needle) haystack
+  DiagramN needle, DiagramN haystack -> case compare (dimension (DiagramN needle)) (dimension (DiagramN haystack)) of
+    LT -> enumerateSliceEmbeddings (DiagramN needle) haystack
+    EQ -> do
+      embedding <- enumerateSliceEmbeddings (source needle) haystack
+      guard (checkCospanEmbedding embedding (cospans needle) (cospans haystack))
+      pure embedding
+    GT -> Nil
   where
-  -- | Enumerate the embeddings of a diagram into the regular slices of the `haystack`.
-  enumerateSliceEmbeddings :: Partial => Diagram -> List Embedding
-  enumerateSliceEmbeddings needle' = join $ mapWithIndex (\i slice -> map ((:) i) (enumerateEmbeddings needle' slice)) $ regularSlices haystack
+  enumerateSliceEmbeddings :: Diagram -> DiagramN -> List Embedding
+  enumerateSliceEmbeddings needle haystack = join $ mapWithIndex (\i slice -> map ((:) i) (enumerateEmbeddings needle slice)) $ regularSlices haystack
 
-attach :: Boundary -> Embedding -> Diagram -> Diagram -> Maybe Diagram
-attach _ _ (Diagram0 _) _ = Nothing
-
-attach _ _ _ (Diagram0 _) = Nothing
-
-attach boundary embedding small large = unsafePartial $ go (dimension large - dimension small) boundary
+attach :: Boundary -> Embedding -> DiagramN -> DiagramN -> Maybe DiagramN
+attach boundary embedding small large = unsafePartial $ go (dimension (DiagramN large) - dimension (DiagramN small)) boundary
   where
-  go :: Partial => Int -> Boundary -> Maybe Diagram
+  go :: Partial => Int -> Boundary -> Maybe DiagramN
   go depth _
     | depth < 0 = Nothing
 
@@ -256,32 +237,24 @@ attach boundary embedding small large = unsafePartial $ go (dimension large - di
     guard (checkEmbedding embedding (target small) (source large))
     let
       cospansPadded = map (cospanPad embedding) (cospans small)
-    pure
-      $ DiagramN
-          { source: rewriteBackwards cospansPadded (source large)
-          , cospans: cospansPadded <> cospans large
-          }
+    pure $ unsafeMake (rewriteBackwards cospansPadded (source large)) (cospansPadded <> cospans large)
 
   go 0 Target = do
     guard (checkEmbedding embedding (source small) (target large))
     let
       cospansPadded = map (cospanPad embedding) (cospans small)
-    pure
-      $ DiagramN
-          { source: source large
-          , cospans: cospans large <> cospansPadded
-          }
+    pure $ unsafeMake (source large) (cospans large <> cospansPadded)
 
   go depth Source = do
-    source_ <- attach boundary embedding small (source large)
-    pure $ DiagramN { source: source_, cospans: map (padDepth depth (size small)) (cospans large) }
+    source_ <- attach boundary embedding small (toDiagramN (source large))
+    pure $ unsafeMake (DiagramN source_) (map (padDepth depth (size small)) (cospans large))
 
   go _ Target = do
-    source_ <- attach boundary embedding small (source large)
-    pure $ DiagramN { source: source_, cospans: cospans large }
+    source_ <- attach boundary embedding small (toDiagramN (source large))
+    pure $ unsafeMake (DiagramN source_) (cospans large)
 
   padDepth :: Int -> Int -> Cospan -> Cospan
   padDepth depth pad cospan = cospanPad (replicate (depth - 1) 0 <> (pad : Nil)) cospan
 
   rewriteBackwards :: List Cospan -> Diagram -> Diagram
-  rewriteBackwards cospans_ diagram = unsafePartial $ target $ DiagramN { source: diagram, cospans: reverse $ map cospanReverse cospans_ }
+  rewriteBackwards cospans_ diagram = target $ unsafeMake diagram (reverse $ map cospanReverse cospans_)
