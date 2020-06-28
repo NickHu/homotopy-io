@@ -1,6 +1,6 @@
 module Homotopy.Core.Projection (pointDepth, generatorAt, wireDepths) where
 
-import Data.Foldable (maximum)
+import Data.Semigroup.Foldable (maximum)
 import Data.List (List(..), head, (!!), (:))
 import Data.Maybe (Maybe(..), fromJust)
 import Homotopy.Core.Common (Generator, SliceIndex(..), Boundary(..), Height(..))
@@ -8,7 +8,6 @@ import Homotopy.Core.Diagram (Diagram(..), DiagramN)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Rewrite (Rewrite)
 import Homotopy.Core.Rewrite as Rewrite
-import Partial.Unsafe (unsafePartial)
 import Prelude (bind, map, min, pure, ($), (+), (>=))
 
 pointDepth :: Partial => DiagramN -> Int -> Maybe Int
@@ -31,7 +30,7 @@ pointDepth diagram height = minMaybe forward backward
 maxDimensionGenerator :: Diagram -> Generator
 maxDimensionGenerator (Diagram0 g) = g
 
-maxDimensionGenerator (DiagramN d) = unsafePartial $ fromJust $ maximum $ map maxDimensionGenerator $ Diagram.slices d
+maxDimensionGenerator (DiagramN d) = maximum $ map maxDimensionGenerator $ Diagram.slices d
 
 generatorAt :: Partial => Diagram -> List SliceIndex -> Maybe Generator
 generatorAt diagram Nil = Just (maxDimensionGenerator diagram)

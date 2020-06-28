@@ -20,8 +20,12 @@ module Homotopy.Core.Diagram
 
 import Control.MonadPlus (guard)
 import Data.Foldable (length)
-import Data.List (List(..), concatMap, drop, head, last, mapWithIndex, reverse, scanl, tail, take, (!!), (:))
+import Data.List (List(..), concatMap, drop, head, mapWithIndex, reverse, tail, take, (:))
+import Data.List.NonEmpty (NonEmptyList(), scanl)
+import Data.List.NonEmpty as NEL
 import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
+import Data.Newtype (unwrap, wrap)
+import Data.NonEmpty ((:|))
 import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
 import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse)
@@ -100,11 +104,11 @@ source (InternalDiagram d) = d.source
 
 -- | The target slice of an (n + 1)-dimensional diagram.
 target :: DiagramN -> Diagram
-target d = unsafePartial $ fromJust $ last $ slices d
+target = slices >>> NEL.last
 
--- | The list of all the slices of an (n + 1)-dimensional diagram.
-slices :: DiagramN -> List Diagram
-slices d = unsafePartial $ scanl (\s r -> r s) (source d) $ concatMap genRewrites $ cospans d
+-- | The the slices of an (n + 1)-dimensional diagram.
+slices :: DiagramN -> NonEmptyList Diagram
+slices d = unsafePartial $ fromJust $ NEL.fromList $ scanl (\s r -> r s) (source d) (concatMap genRewrites (cospans d))
   where
   genRewrites :: Partial => Cospan -> List (Diagram -> Diagram)
   genRewrites { forward: fw, backward: bw } = rewriteForward fw : rewriteBackward bw : Nil
@@ -137,7 +141,7 @@ slices d = unsafePartial $ scanl (\s r -> r s) (source d) $ concatMap genRewrite
 sliceAt :: DiagramN -> SliceIndex -> Maybe Diagram
 sliceAt d i = do
   height <- internalizeHeight d i
-  slices d !! heightToIndex height
+  slices d NEL.!! heightToIndex height
   where
   heightToIndex (Singular h) = h * 2 + 1
 
@@ -145,11 +149,20 @@ sliceAt d i = do
 
 -- | The list of the singular slices of an (n + 1)-dimensional diagram.
 singularSlices :: DiagramN -> List Diagram
-singularSlices d = unsafePartial $ everyOther $ fromJust $ tail (slices d)
+singularSlices d = keepOdds (NEL.toList (slices d))
 
 -- | The list of the regular slices of an (n + 1)-dimensional diagram.
-regularSlices :: DiagramN -> List Diagram
-regularSlices d = everyOther (slices d)
+regularSlices :: DiagramN -> NonEmptyList Diagram
+regularSlices d = wrap (source :| keepOdds rest)
+  where
+  source :| rest = unwrap (slices d)
+
+keepOdds :: forall a. List a -> List a
+keepOdds Nil = Nil
+
+keepOdds (_ : Nil) = Nil
+
+keepOdds (_ : x : xs) = x : keepOdds xs
 
 everyOther :: forall a. List a -> List a
 everyOther Nil = Nil
@@ -224,7 +237,7 @@ enumerateEmbeddings n h = case n, h of
     GT -> Nil
   where
   enumerateSliceEmbeddings :: Diagram -> DiagramN -> List Embedding
-  enumerateSliceEmbeddings needle haystack = join $ mapWithIndex (\i slice -> map ((:) i) (enumerateEmbeddings needle slice)) $ regularSlices haystack
+  enumerateSliceEmbeddings needle haystack = join $ mapWithIndex (\i slice -> map ((:) i) (enumerateEmbeddings needle slice)) $ NEL.toList $ regularSlices haystack
 
 attach :: Boundary -> Embedding -> DiagramN -> DiagramN -> Maybe DiagramN
 attach boundary embedding small large = unsafePartial $ go (dimension (DiagramN large) - dimension (DiagramN small)) boundary
