@@ -6,6 +6,7 @@ import Data.Maybe (Maybe(..), fromJust)
 import Homotopy.Core.Common (Generator, SliceIndex(..), Boundary(..), Height(..))
 import Homotopy.Core.Diagram (Diagram(..), DiagramN)
 import Homotopy.Core.Diagram as Diagram
+import Homotopy.Core.Interval as Interval
 import Homotopy.Core.Rewrite (Rewrite)
 import Homotopy.Core.Rewrite as Rewrite
 import Prelude (bind, map, min, pure, ($), (+), (>=))
@@ -66,5 +67,5 @@ wireDepths diagram row col = do
 
 rewriteWireDepths :: Partial => Rewrite -> DiagramN -> Int -> List (Maybe Int)
 rewriteWireDepths rewrite source targetHeight = do
-  sourceHeight <- Rewrite.singularPreimage rewrite targetHeight
+  sourceHeight <- Interval.toUnfoldable $ Rewrite.singularPreimage rewrite targetHeight
   pure $ map (Rewrite.singularImage (Rewrite.slice rewrite sourceHeight)) $ pointDepth source sourceHeight

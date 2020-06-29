@@ -1,9 +1,11 @@
 module Homotopy.Core.Rewrite where
 
-import Data.List (List(..), drop, findMap, length, take, (!!), (..), (:))
+import Data.List (List(..), drop, findMap, length, take, (!!), (:))
 import Data.Maybe (fromJust)
+import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
+import Homotopy.Core.Interval (Interval(..))
+import Homotopy.Core.Interval as Interval
 import Prelude (class Eq, class Semigroup, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
-import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator())
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -99,15 +101,15 @@ singularImage (RewriteN { cones }) h = go 0 cones
     | h < c.index + coneSize c = c.index + i
     | otherwise = go (i + 1 - coneSize c) cs
 
-singularPreimage :: Partial => Rewrite -> Int -> List Int
+singularPreimage :: Partial => Rewrite -> Int -> Interval
 singularPreimage (RewriteN { cones }) h = go 0 cones
   where
-  go :: Int -> List Cone -> List Int
-  go i Nil = (h - i) : Nil
+  go :: Int -> List Cone -> Interval
+  go i Nil = Interval { start: h - i, length: 1 }
 
   go i (c : cs)
-    | h < c.index + i = (h - i) : Nil
-    | h == c.index + i = c.index .. (c.index + coneSize c)
+    | h < c.index + i = Interval { start: h - i, length: 1 }
+    | h == c.index + i = Interval { start: c.index, length: coneSize c }
     | otherwise = go (i + 1 - coneSize c) cs
 
 regularImage :: Partial => Rewrite -> Int -> Int
@@ -120,14 +122,14 @@ regularImage (RewriteN { cones }) h = go 0 cones
     | h < c.index + i = h - i
     | otherwise = go (i + 1 - coneSize c) cs
 
-regularPreimage :: Partial => Rewrite -> Int -> List Int
+regularPreimage :: Partial => Rewrite -> Int -> Interval
 regularPreimage lim h =
   let
     left = singularImage lim (h - 1)
 
     right = singularImage lim h
   in
-    (left + 1) .. (right + 1)
+    Interval { start: left + 1, length: right - left }
 
 transportCoordinates :: Partial => Rewrite -> List SliceIndex -> List (List SliceIndex)
 transportCoordinates _ Nil = Nil : Nil
@@ -142,6 +144,7 @@ transportCoordinates lim (Interior (Singular p) : ps) =
 transportCoordinates lim (Interior (Regular p) : ps) =
   map
     (\h -> Interior (Regular h) : ps)
+    $ Interval.toUnfoldable
     $ regularPreimage lim p
 
 -- | Composition of rewrites.
