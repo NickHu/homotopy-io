@@ -39,6 +39,10 @@ instance enumHeight :: Enum Height where
   pred (Regular i) = Just (Singular (i - 1))
   pred (Singular i) = Just (Regular i)
 
+instance showHeight :: Show Height where
+  show (Regular i) = "R" <> show i
+  show (Singular i) = "S" <> show i
+
 data SliceIndex
   = Interior Height
   | Boundary Boundary

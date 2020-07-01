@@ -24,7 +24,7 @@ import Data.Foldable (length)
 import Data.List (List(..), concatMap, drop, head, mapWithIndex, reverse, tail, take, (:))
 import Data.List.NonEmpty (NonEmptyList(..), scanl)
 import Data.List.NonEmpty as NEL
-import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, maybe)
 import Data.Newtype (unwrap, wrap)
 import Data.NonEmpty ((:|))
 import Data.Unfoldable (replicate)
