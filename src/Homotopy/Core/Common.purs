@@ -5,8 +5,10 @@ module Homotopy.Core.Common
   , Boundary(..)
   ) where
 
+import Data.Enum (class Enum)
+import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
-import Prelude (class Bounded, class Eq, class Ord, compare, (*), (+))
+import Prelude (class Bounded, class Eq, class Ord, class Show, compare, show, (*), (+), (-), (<>))
 
 newtype Generator
   = Generator { id :: Int, dimension :: Int }
@@ -14,6 +16,9 @@ newtype Generator
 derive instance eqGenerator :: Eq Generator
 
 derive instance ordGenerator :: Ord Generator
+
+instance showGenerator :: Show Generator where
+  show (Generator g) = show g.id <> "!" <> show g.dimension
 
 data Height
   = Regular Int
@@ -27,6 +32,12 @@ instance ordHeight :: Ord Height where
     toInt (Regular i) = i * 2
 
     toInt (Singular i) = i * 2 + 1
+
+instance enumHeight :: Enum Height where
+  succ (Regular i) = Just (Singular i)
+  succ (Singular i) = Just (Regular (i + 1))
+  pred (Regular i) = Just (Singular (i - 1))
+  pred (Singular i) = Just (Regular i)
 
 data SliceIndex
   = Interior Height

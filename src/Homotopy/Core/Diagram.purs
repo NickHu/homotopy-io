@@ -16,12 +16,13 @@ module Homotopy.Core.Diagram
   , checkEmbedding
   , enumerateEmbeddings
   , attach
+  , toDiagramN
   ) where
 
 import Control.MonadPlus (guard)
 import Data.Foldable (length)
 import Data.List (List(..), concatMap, drop, head, mapWithIndex, reverse, tail, take, (:))
-import Data.List.NonEmpty (NonEmptyList(), scanl)
+import Data.List.NonEmpty (NonEmptyList(..), scanl)
 import Data.List.NonEmpty as NEL
 import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
 import Data.Newtype (unwrap, wrap)
@@ -108,7 +109,7 @@ target = slices >>> NEL.last
 
 -- | The the slices of an (n + 1)-dimensional diagram.
 slices :: DiagramN -> NonEmptyList Diagram
-slices d = unsafePartial $ fromJust $ NEL.fromList $ scanl (\s r -> r s) (source d) (concatMap genRewrites (cospans d))
+slices d = unsafePartial $ NonEmptyList (source d :| scanl (\s r -> r s) (source d) (concatMap genRewrites (cospans d)))
   where
   genRewrites :: Partial => Cospan -> List (Diagram -> Diagram)
   genRewrites { forward: fw, backward: bw } = rewriteForward fw : rewriteBackward bw : Nil
