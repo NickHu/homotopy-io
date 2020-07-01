@@ -1,11 +1,14 @@
 module Homotopy.Core.Rewrite where
+-- TODO: explicitly specify exports
 
+import Data.Generic.Rep (class Generic)
+import Data.Generic.Rep.Show (genericShow)
 import Data.List (List(..), drop, findMap, length, take, (!!), (:))
 import Data.Maybe (fromJust)
 import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
-import Prelude (class Eq, class Semigroup, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
+import Prelude (class Eq, class Semigroup, class Show, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -16,6 +19,11 @@ data Rewrite
   | RewriteN { dimension :: Int, cones :: List Cone }
 
 derive instance eqRewrite :: Eq Rewrite
+
+derive instance genericRewrite :: Generic Rewrite _
+
+instance showRewrite :: Show Rewrite where
+  show x = genericShow x
 
 -- | A pair of a forward rewrite and a backward rewrite.
 -- |

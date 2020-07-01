@@ -1,8 +1,8 @@
 module Homotopy.Core.Projection (pointDepth, generatorAt, wireDepths) where
 
-import Data.Semigroup.Foldable (maximum)
 import Data.List (List(..), head, (!!), (:))
 import Data.Maybe (Maybe(..), fromJust)
+import Data.Semigroup.Foldable (maximum)
 import Homotopy.Core.Common (Generator, SliceIndex(..), Boundary(..), Height(..))
 import Homotopy.Core.Diagram (Diagram(..), DiagramN)
 import Homotopy.Core.Diagram as Diagram

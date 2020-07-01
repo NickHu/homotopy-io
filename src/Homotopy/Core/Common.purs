@@ -1,11 +1,13 @@
 module Homotopy.Core.Common
-  ( Generator(..)
+  ( Boundary(..)
+  , Generator(..)
   , Height(..)
   , SliceIndex(..)
-  , Boundary(..)
   ) where
 
 import Data.Enum (class Enum)
+import Data.Generic.Rep (class Generic)
+import Data.Generic.Rep.Show (genericShow)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Prelude (class Bounded, class Eq, class Ord, class Show, compare, show, (*), (+), (-), (<>))
@@ -17,6 +19,8 @@ derive instance eqGenerator :: Eq Generator
 
 derive instance ordGenerator :: Ord Generator
 
+derive instance genericGenerator :: Generic Generator _
+
 instance showGenerator :: Show Generator where
   show (Generator g) = show g.id <> "!" <> show g.dimension
 
@@ -25,6 +29,8 @@ data Height
   | Singular Int
 
 derive instance eqHeight :: Eq Height
+
+derive instance genericHeight :: Generic Height _
 
 instance ordHeight :: Ord Height where
   compare a b = compare (toInt a) (toInt b)
@@ -64,8 +70,18 @@ instance boundedSliceIndex :: Bounded SliceIndex where
 
 derive instance eqSliceIndex :: Eq SliceIndex
 
+derive instance genericSliceIndex :: Generic SliceIndex _
+
+instance showSliceIndex :: Show SliceIndex where
+  show x = genericShow x
+
 data Boundary
   = Source
   | Target
 
 derive instance eqBoundary :: Eq Boundary
+
+derive instance genericBoundary :: Generic Boundary _
+
+instance showBoundary :: Show Boundary where
+  show x = genericShow x

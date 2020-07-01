@@ -1,26 +1,28 @@
 module Homotopy.Core.Diagram
   ( Diagram(..)
   , DiagramN
-  , identity
-  , dimension
-  , size
+  , attach
+  , checkEmbedding
   , cospans
+  , dimension
+  , enumerateEmbeddings
   , fromGenerator
+  , identity
+  , internalizeHeight
+  , regularSlices
+  , singularSlices
+  , size
+  , sliceAt
+  , slices
   , source
   , target
-  , slices
-  , sliceAt
-  , singularSlices
-  , regularSlices
-  , internalizeHeight
-  , checkEmbedding
-  , enumerateEmbeddings
-  , attach
   , toDiagramN
   ) where
 
 import Control.MonadPlus (guard)
 import Data.Foldable (length)
+import Data.Generic.Rep (class Generic)
+import Data.Generic.Rep.Show (genericShow)
 import Data.List (List(..), concatMap, drop, head, mapWithIndex, reverse, tail, take, (:))
 import Data.List.NonEmpty (NonEmptyList(..), scanl)
 import Data.List.NonEmpty as NEL
@@ -31,7 +33,7 @@ import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
 import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse)
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>))
+import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>))
 
 -- | A diagram is either 0-dimensional, in which case it consists of a
 -- | generator, or n-dimensional (for n > 0), in which case it has a source
@@ -40,8 +42,18 @@ data Diagram
   = Diagram0 Generator
   | DiagramN DiagramN
 
+derive instance genericDiagram :: Generic Diagram _
+
+instance showDiagram :: Show Diagram where
+  show x = genericShow x
+
 newtype DiagramN
   = InternalDiagram { source :: Diagram, cospans :: List Cospan }
+
+derive instance genericDiagramN :: Generic DiagramN _
+
+instance showDiagramN :: Show DiagramN where
+  show x = genericShow x
 
 unsafeMake :: Diagram -> List Cospan -> DiagramN
 unsafeMake s cs = InternalDiagram { source: s, cospans: cs }
@@ -65,7 +77,7 @@ cospans :: DiagramN -> List Cospan
 cospans (InternalDiagram d) = d.cospans
 
 -- | The size of a diagram in the top dimension. This is the number of cospans
--- | or equivalently the number of singular slices. 
+-- | or equivalently the number of singular slices.
 size :: DiagramN -> Int
 size = cospans >>> length
 

@@ -4,16 +4,17 @@ You can edit this file as you like.
 -}
 { name = "homotopy-core"
 , dependencies =
-  [ "console"
+  [ "aff"
+  , "console"
   , "effect"
-  , "lists"
-  , "psci-support"
-  , "integers"
-  , "transformers"
-  , "ordered-collections"
   , "enums"
+  , "generics-rep"
+  , "integers"
+  , "lists"
+  , "ordered-collections"
+  , "psci-support"
   , "spec"
-  , "aff"
+  , "transformers"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]
