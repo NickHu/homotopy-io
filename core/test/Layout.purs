@@ -5,18 +5,18 @@ import Data.Array as Array
 import Data.Enum (enumFromTo)
 import Data.List (List, zip)
 import Data.List.NonEmpty as NEL
-import Data.Maybe (Maybe(..))
+import Data.Maybe (Maybe(..), fromJust)
 import Data.Tuple (Tuple(..))
 import Effect.Exception (Error)
 import Homotopy.Core.Common (Height(..))
 import Homotopy.Core.Diagram (Diagram, toDiagramN)
 import Homotopy.Core.Diagram as Diagram
-import Homotopy.Core.Layout (Point2D(..), solveLayout)
+import Homotopy.Core.Layout (Point2D(..), solveLayout, layoutPosition)
 import Partial.Unsafe (unsafePartial)
 import Prelude (Unit, bind, discard, join, map, ($), (<<<))
+import Test.Examples as Examples
 import Test.Spec (Spec, it)
 import Test.Spec.Assertions (shouldEqual)
-import Test.Examples as Examples
 
 points :: Partial => Diagram -> List Point2D
 points diagram = do
@@ -31,9 +31,9 @@ shouldLayoutAs :: forall m. MonadThrow Error m => Diagram -> Array (Array Number
 shouldLayoutAs diagram positions =
   unsafePartial
     $ let
-        f = solveLayout diagram
+        layout = fromJust $ solveLayout diagram
       in
-        map f (points diagram) `shouldEqual` map Just (Array.toUnfoldable $ join $ positions)
+        map (layoutPosition layout) (points diagram) `shouldEqual` map Just (Array.toUnfoldable $ join $ positions)
 
 main :: Spec Unit
 main = do

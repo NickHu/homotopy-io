@@ -1,4 +1,4 @@
-module Homotopy.Core.Layout (Point2D(..), solveLayout) where
+module Homotopy.Core.Layout (Point2D(..), Layout, solveLayout, layoutPosition) where
 
 import Data.Int
 import Control.Alt (void)
@@ -10,7 +10,7 @@ import Data.List (List(..), length, zip, (:))
 import Data.List.NonEmpty as NEL
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromMaybe)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe)
 import Data.Set (Set)
 import Data.Set as Set
 import Data.Traversable (traverse)
@@ -22,6 +22,12 @@ import Homotopy.Core.Interval as Interval
 import Homotopy.Core.Rewrite as Rewrite
 import Partial.Unsafe (unsafePartial)
 import Prelude (class Eq, class Ord, class Show, Unit, bind, discard, map, max, min, negate, otherwise, pure, show, unit, ($), (+), (-), (/), (/=), (<), (<<<), (<=), (<>), (>))
+
+newtype Layout
+  = Layout (Map Point2D Number)
+
+layoutPosition :: Layout -> Point2D -> Maybe Number
+layoutPosition (Layout layout) point = Map.lookup point layout
 
 data Point2D
   = Point2D Height Height
@@ -134,20 +140,20 @@ prepareConstraints diagram =
     q' <- follow q
     void $ modify \s -> s { distance = Set.insert (Distance p' q') s.distance }
 
-solveConstraints :: Constraints -> Point2D -> Maybe Number
+solveConstraints :: Constraints -> Layout
 solveConstraints constraints = evalState loop Map.empty
   where
-  loop :: State (Map Point2D Number) (Point2D -> Maybe Number)
+  loop :: State (Map Point2D Number) Layout
   loop = do
     dirty <- step
     if dirty then loop else map finalize get
 
-  finalize :: Map Point2D Number -> Point2D -> Maybe Number
-  finalize result point =
-    let
-      point' = fromMaybe point (Map.lookup point constraints.links)
-    in
-      Map.lookup point' result
+  finalize :: Map Point2D Number -> Layout
+  finalize result =
+    Layout
+      ( map (\target -> unsafePartial $ fromJust $ Map.lookup target result) constraints.links
+          <> result
+      )
 
   step :: State (Map Point2D Number) Boolean
   step = do
@@ -188,10 +194,10 @@ solveConstraints constraints = evalState loop Map.empty
   setPosition :: Point2D -> Number -> State (Map Point2D Number) Unit
   setPosition point pos = void $ modify (Map.insert point pos)
 
-solveLayout :: Diagram -> Point2D -> Maybe Number
-solveLayout (Diagram0 _) = \_ -> Nothing
+solveLayout :: Diagram -> Maybe Layout
+solveLayout (Diagram0 _) = Nothing
 
 solveLayout d
-  | Diagram.dimension d < 2 = \_ -> Nothing
+  | Diagram.dimension d < 2 = Nothing
 
-solveLayout (DiagramN d) = unsafePartial $ solveConstraints $ prepareConstraints d
+solveLayout (DiagramN d) = Just $ unsafePartial $ solveConstraints $ prepareConstraints d

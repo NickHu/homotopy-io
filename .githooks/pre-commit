@@ -4,7 +4,7 @@ FILES=$(git diff --cached --name-only --diff-filter=ACMR "*.purs" | sed 's| |\\ 
 
 # Run purty on all purescript files
 for f in $FILES
-do ./node_modules/.bin/purty "$f" --write
+do purty "$f" --write
 done
 
 # Stage the modified files back to the index
