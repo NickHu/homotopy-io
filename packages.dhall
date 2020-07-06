@@ -126,6 +126,8 @@ let overrides =
       upstream.typelevel-peano // { version = "7e3f7d74e459d9f0c7f14d8a5c9ed2b368ecc9a8" }
   }
 
-let additions = {=}
+let additions = 
+  { homotopy-core = ./core/spago.dhall as Location
+  }
 
 in  upstream // overrides // additions
