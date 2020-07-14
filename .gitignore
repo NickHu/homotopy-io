@@ -7,5 +7,7 @@
 /*/.psc*
 /*/.purs*
 /*/.psa*
+/*/.cache
 /*/.spago
+/*/dist
 /*/tags
