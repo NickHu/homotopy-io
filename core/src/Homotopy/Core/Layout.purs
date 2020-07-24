@@ -1,11 +1,11 @@
-module Homotopy.Core.Layout (Point2D(..), Layout, solveLayout, layoutPosition) where
+module Homotopy.Core.Layout (Layout, solveLayout, layoutPosition) where
 
 import Data.Int
 import Control.Alt (void)
 import Control.Monad.State (State, evalState, execState, get, gets, modify)
 import Control.MonadPlus (class Monad)
 import Data.Enum (enumFromTo)
-import Data.Foldable (for_, sum, traverse_)
+import Data.Foldable (for_, maximum, sum, traverse_)
 import Data.List (List(..), length, zip, (:))
 import Data.List.NonEmpty as NEL
 import Data.Map (Map)
@@ -15,19 +15,28 @@ import Data.Set (Set)
 import Data.Set as Set
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
-import Homotopy.Core.Common (Height(..))
+import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..))
 import Homotopy.Core.Diagram (Diagram(..), DiagramN, toDiagramN)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Interval as Interval
 import Homotopy.Core.Rewrite as Rewrite
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, class Ord, class Show, Unit, bind, discard, map, max, min, negate, otherwise, pure, show, unit, ($), (+), (-), (/), (/=), (<), (<<<), (<=), (<>), (>))
+import Prelude (class Eq, class Ord, class Show, Unit, bind, discard, map, max, min, negate, otherwise, pure, show, unit, ($), (*), (+), (-), (/), (/=), (<), (<<<), (<=), (<>), (>))
 
-newtype Layout
-  = Layout (Map Point2D Number)
+data Layout
+  = Layout
+    { positions :: Map Point2D Number
+    , maximumX :: Number
+    , sliceCount :: Int
+    }
 
-layoutPosition :: Layout -> Point2D -> Maybe Number
-layoutPosition (Layout layout) point = Map.lookup point layout
+layoutPosition :: Layout -> SliceIndex -> SliceIndex -> Maybe Number
+layoutPosition l@(Layout layout) = case _, _ of
+  position, Boundary Source -> layoutPosition l position (Interior (Regular 0))
+  position, Boundary Target -> layoutPosition l position (Interior (Regular layout.sliceCount))
+  Boundary Source, _ -> Just (-1.0)
+  Boundary Target, _ -> Just (layout.maximumX + 1.0)
+  Interior x, Interior y -> Map.lookup (Point2D x y) layout.positions
 
 data Point2D
   = Point2D Height Height
@@ -140,8 +149,8 @@ prepareConstraints diagram =
     q' <- follow q
     void $ modify \s -> s { distance = Set.insert (Distance p' q') s.distance }
 
-solveConstraints :: Constraints -> Layout
-solveConstraints constraints = evalState loop Map.empty
+solveConstraints :: DiagramN -> Constraints -> Layout
+solveConstraints diagram constraints = evalState loop Map.empty
   where
   loop :: State (Map Point2D Number) Layout
   loop = do
@@ -150,10 +159,14 @@ solveConstraints constraints = evalState loop Map.empty
 
   finalize :: Map Point2D Number -> Layout
   finalize result =
-    Layout
-      ( map (\target -> unsafePartial $ fromJust $ Map.lookup target result) constraints.links
-          <> result
-      )
+    let
+      positions = map (\target -> unsafePartial $ fromJust $ Map.lookup target result) constraints.links <> result
+
+      sliceCount = Diagram.size diagram
+
+      maximumX = unsafePartial (fromJust (maximum result))
+    in
+      Layout { positions, sliceCount, maximumX }
 
   step :: State (Map Point2D Number) Boolean
   step = do
@@ -200,4 +213,4 @@ solveLayout (Diagram0 _) = Nothing
 solveLayout d
   | Diagram.dimension d < 2 = Nothing
 
-solveLayout (DiagramN d) = Just $ unsafePartial $ solveConstraints $ prepareConstraints d
+solveLayout (DiagramN d) = Just $ unsafePartial $ solveConstraints d $ prepareConstraints d
