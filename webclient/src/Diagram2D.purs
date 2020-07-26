@@ -40,6 +40,11 @@ type Style
 type Event
   = Point2D Int
 
+type Point
+  = { position :: Number
+    , generator :: Generator
+    }
+
 diagramSVG :: Partial => Context -> Layout -> Diagram -> Widget HTML { x :: Int, y :: Int }
 diagramSVG ctx layout diagram =
   SVG.svg props
