@@ -1,72 +1,104 @@
 module Homotopy.Webclient.Main where
 
-import Homotopy.Webclient.Diagram2D
 import Prelude
+import Concur.Core (Widget)
+import Concur.Core.Patterns (tea)
+import Concur.React (HTML)
 import Concur.React.DOM as D
+import Concur.React.Props as P
 import Concur.React.Run (runWidgetInDom)
-import Control.Monad.Rec.Class (forever)
-import Data.Array ((!!))
-import Data.List (List(..))
-import Data.Maybe (fromJust)
+import Data.Foldable (fold)
+import Data.Maybe (Maybe(..))
 import Effect (Effect)
-import Effect.Class (liftEffect)
-import Effect.Console (logShow)
-import Homotopy.Core.Common (Boundary(..), Generator(..))
-import Homotopy.Core.Diagram (Diagram(..), DiagramN)
-import Homotopy.Core.Diagram as Diagram
-import Homotopy.Core.Layout as Layout
-import Partial.Unsafe (unsafePartial)
+import Homotopy.Webclient.Component.Icon as Icon
+import Homotopy.Webclient.Component.Transition (option)
+import Homotopy.Webclient.State (State, Action(..))
+import Homotopy.Webclient.State as State
 
-associativity :: DiagramN
-associativity =
-  let
-    attach b e s l = unsafePartial $ fromJust $ Diagram.attach b e s l
-
-    x = Generator { id: 0, dimension: 0 }
-
-    f = Generator { id: 1, dimension: 1 }
-
-    m = Generator { id: 2, dimension: 2 }
-
-    a = Generator { id: 3, dimension: 3 }
-
-    fd = Diagram.fromGenerator (Diagram0 x) (Diagram0 x) f
-
-    ffd = attach Target Nil fd fd
-
-    md = Diagram.fromGenerator (DiagramN ffd) (DiagramN fd) m
-
-    mfd = attach Target Nil fd md
-
-    ld = attach Target Nil md mfd
-
-    fmd = attach Source Nil fd md
-
-    rd = attach Target Nil md fmd
-
-    ad = Diagram.fromGenerator (DiagramN ld) (DiagramN rd) a
-  in
-    ad
+foreign import logoSVG :: String
 
 main :: Effect Unit
-main =
-  let
-    diagram = Diagram.target associativity
+main = runWidgetInDom "app" (tea State.initial root State.reduce)
+  where
+  root state =
+    fold
+      [ sidebar state
+      , drawer state
+      , div "workspace" []
+      ]
 
-    layout = unsafePartial $ fromJust $ Layout.solveLayout diagram
+div :: forall a. String -> Array (Widget HTML a) -> Widget HTML a
+div className children = D.div [ P.className className ] children
 
-    ctx =
-      { colors: \(Generator x) -> unsafePartial $ fromJust $ [ "gray", "black", "red" ] !! x.dimension
-      , scale: { x: 50.0, y: 50.0 }
-      , id: "diagram"
-      , style:
-          { pointRadius: 8.0
-          , wireThickness: 4.0
-          , crossingThickness: 8.0
-          }
-      }
-  in
-    runWidgetInDom "app"
-      $ forever do
-          event <- D.div' [ unsafePartial $ diagramSVG ctx layout diagram ]
-          liftEffect (logShow event)
+sidebar :: State -> Widget HTML Action
+sidebar state =
+  div "sidebar"
+    [ div "sidebar__logo" [ logo ]
+    , div "sidebar__actions"
+        [ toggle { view: State.ViewProject, icon: "book", name: "Project" }
+        , toggle { view: State.ViewSignature, icon: "box", name: "Signature" }
+        , toggle { view: State.ViewUser, icon: "user", name: "User" }
+        ]
+    ]
+  where
+  logo =
+    D.img
+      [ P.src logoSVG
+      , P.className "sidebar__logo__image"
+      , P.alt "homotopy.io"
+      , P.title "homotopy.io"
+      ]
+
+  toggle { name, icon, view } =
+    let
+      active = if state.view == Just view then "sidebar__action--active" else ""
+    in
+      D.div [ P.className $ "sidebar__action " <> active ]
+        [ D.div [ P.className "tooltip tooltip--right", P.unsafeMkProp "data-tooltip" name ]
+            [ Icon.icon icon
+                [ P.className "sidebar__action__icon"
+                , P.title name
+                , ToggleView view <$ P.onClick
+                ]
+            ]
+        ]
+
+drawer :: State -> Widget HTML Action
+drawer state = transition (map showDrawer state.view)
+  where
+  transition = option { timeout: 150.0, className: "drawer" }
+
+  showDrawer = case _ of
+    State.ViewSignature -> signatureDrawer state
+    State.ViewUser -> userDrawer state
+    State.ViewProject -> projectDrawer state
+
+type DrawerProps a
+  = { className :: String
+    , title :: String
+    , content :: Widget HTML a
+    }
+
+makeDrawer :: forall a. DrawerProps a -> Widget HTML a
+makeDrawer props =
+  div ("drawer " <> props.className)
+    [ div "drawer__header"
+        [ div "drawer__title" [ D.text props.title ]
+        ]
+    , div "drawer__content" [ props.content ]
+    ]
+
+projectDrawer :: State -> Widget HTML Action
+projectDrawer state = makeDrawer { title: "Project", className: "project", content }
+  where
+  content = mempty
+
+signatureDrawer :: State -> Widget HTML Action
+signatureDrawer state = makeDrawer { title: "Signature", className: "signature", content }
+  where
+  content = mempty
+
+userDrawer :: State -> Widget HTML Action
+userDrawer state = makeDrawer { title: "User", className: "user", content }
+  where
+  content = mempty

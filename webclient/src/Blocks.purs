@@ -65,8 +65,6 @@ type Point2D a
     , y :: a
     }
 
--- TODO: Make block a traversable
--- TODO: Annotate block function
 traverseBlock :: forall a b f. Applicative f => (a -> f b) -> Block a -> f (Block b)
 traverseBlock go = case _ of
   BlockCell block -> BlockCell <$> traverseBlockCell go block

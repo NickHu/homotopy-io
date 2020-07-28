@@ -1,0 +1,174 @@
+@use "sass:color";
+
+@mixin hover-support {
+  @media (pointer: fine) {
+    &:hover {
+      @content;
+    }
+  }
+}
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  color: #222;
+  font-family: sans-serif;
+  font-size: 15px;
+  box-sizing: border-box;
+  background: #ddd;
+}
+
+#app {
+  display: flex;
+  height: 100%;
+  position: relative;
+}
+
+.sidebar {
+  background: rgb(39, 44, 54);
+  width: 48px;
+  height: 100%;
+  z-index: 10;
+  position: static;
+  top: 0;
+  left: 0;
+
+  &__logo__image {
+    padding: 8px;
+    width: 32px;
+    height: 32px;
+  }
+
+  &__action--active {
+    background: color.scale(rgb(39, 44, 54), $lightness: 50%);
+  }
+
+  &__action * {
+    width: 48px;
+    height: 48px;
+  }
+
+  &__action__icon {
+    color: white;
+    width: 32px;
+    height: 32px;
+    padding: 8px;
+    stroke-width: 1px;
+    cursor: pointer;
+    
+    @include hover-support() {
+      background: color.scale(rgb(39, 44, 54), $lightness: 50%);
+    }
+  }
+}
+
+.signature {
+  width: 256px;
+}
+
+.user {
+  width: 256px;
+}
+
+.project {
+  width: 256px;
+}
+
+.drawer {
+  overflow-x: hidden;
+  background: rgb(244, 245, 247);
+  position: static;
+  height: 100%;
+  top: 0;
+  left: 48px;
+  box-shadow: 2px 0px 1px #ccc;
+  transition: width 150ms ease;
+
+  &--enter:not(&--enter-active), &--exit-active {
+    width: 0px !important;
+  }
+
+  &__header {
+    display: flex;
+    height: 48px;
+    align-items: stretch;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
+  &__title {
+    align-items: center;
+    display: flex;
+    flex: 1;
+    padding: 8px;
+    font-size: 1.2em;
+  }
+
+  &__actions {
+    align-items: center;
+    display: flex;
+    height: 48px;
+  }
+
+  &__action {
+    cursor: pointer;
+    padding: 4px;
+    margin: 4px;
+  }
+
+  &__content {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+.tooltip {
+  position: relative;
+
+  &::after {
+    background: #333;
+    border-radius: 10px;
+    color: white;
+    display: none;
+    padding: 10px 15px;
+    position: absolute;
+    text-align: center;
+    z-index: 900;
+    content: attr(data-tooltip);
+    font-size: 12px;
+  }
+
+  &::before {
+    background: #333;
+    content: ' ';
+    display: none;
+    position: absolute;
+    width: 15px;
+    height: 15px;
+    z-index: 900;
+  }
+
+  &--right::after {
+    top: 50%;
+    right: 0;
+    transform: translate(calc(100% + 10px), -50%);
+  }
+
+  &--right::before {
+    top: 50%;
+    right: 0;
+    transform: translate(calc(100% + 5px), -50%) rotate(45deg);
+  }
+
+  @include hover-support() {
+    &::after, &::before {
+      display: block;
+    }
+  }
+
+}
+
+.workspace {
+  flex: 1;
+}
