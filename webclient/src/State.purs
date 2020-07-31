@@ -6,6 +6,7 @@ import Data.Lens as Lens
 import Data.Lens.At (at)
 import Data.Map (Map)
 import Data.Maybe (Maybe(..))
+import Effect (Effect)
 import Homotopy.Core.Common (Generator)
 import Homotopy.Webclient.Lenses as R
 
@@ -64,8 +65,8 @@ initial =
   }
 
 -------------------------------------------------------------------------------
-reduce :: Action -> State -> State
-reduce action state = case action of
+reduce :: State -> Action -> State
+reduce state = case _ of
   --
   ToggleView view
     | state.view == Just view -> state { view = Nothing }
@@ -76,3 +77,9 @@ reduce action state = case action of
   RecolorGenerator id color -> Lens.set (_generator id <<< _Just <<< R.color) color state
   --
   SelectGenerator id -> state
+
+-------------------------------------------------------------------------------
+type Store
+  = { state :: State
+    , dispatch :: Action -> Effect Unit
+    }

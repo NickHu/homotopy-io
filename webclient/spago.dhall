@@ -7,8 +7,10 @@
   , "debug"
   , "refs"
   , "homotopy-core"
-  , "concur-react"
-  , "concur-core"
+  , "react-basic-hooks"
+  , "react-basic"
+  , "react-basic-dom"
+  , "profunctor-lenses"
   , "unsafe-reference"
   ]
 , packages = ../packages.dhall

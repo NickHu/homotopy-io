@@ -34,10 +34,19 @@ html, body {
   top: 0;
   left: 0;
 
+  * {
+    user-select: none;
+  }
+
   &__logo__image {
     padding: 8px;
     width: 32px;
     height: 32px;
+    user-select: none;
+  }
+
+  &__actions {
+    user-select: none;
   }
 
   &__action--active {
@@ -56,6 +65,7 @@ html, body {
     padding: 8px;
     stroke-width: 1px;
     cursor: pointer;
+    user-select: none;
     
     @include hover-support() {
       background: color.scale(rgb(39, 44, 54), $lightness: 50%);
@@ -103,6 +113,7 @@ html, body {
     flex: 1;
     padding: 8px;
     font-size: 1.2em;
+    user-select: none;
   }
 
   &__actions {
@@ -171,4 +182,21 @@ html, body {
 
 .workspace {
   flex: 1;
+  display: flex;
+}
+
+.panzoom {
+  flex: 1;
+  overflow: hidden;
+  touch-action: none;
+
+  &__child {
+    transform-origin: 0 0 0;
+  }
+}
+
+.square {
+  width: 100px;
+  height: 100px;
+  background: red;
 }

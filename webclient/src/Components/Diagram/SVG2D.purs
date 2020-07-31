@@ -1,17 +1,15 @@
-module Homotopy.Webclient.Diagram2D (Context, Style, diagramSVG) where
+module Homotopy.Webclient.Components.Diagram.SVG2D (Props, Style, svg2d) where
 
 import Homotopy.Webclient.Blocks
 import Prelude
-import Concur.Core (Widget)
-import Concur.React (HTML)
-import Concur.React.Props as P
-import Concur.React.SVG as SVG
 import Data.Array as Array
 import Data.Foldable (fold, foldMap, maximum, minimum)
 import Data.Function (on)
 import Data.Int (toNumber)
 import Data.List (List(..), (:))
 import Data.List as List
+import Data.Map (Map)
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust)
 import Data.Monoid (guard)
 import Data.Traversable (traverse)
@@ -21,14 +19,19 @@ import Homotopy.Core.Common (Boundary(..), Generator, Height(..), SliceIndex(..)
 import Homotopy.Core.Diagram (Diagram)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Layout (Layout, layoutPosition)
-import Math (abs)
 import Homotopy.Core.Projection as Projection
+import Math (abs)
+import Partial.Unsafe (unsafePartial)
+import React.Basic (JSX)
+import React.Basic.DOM.SVG as SVG
 
-type Context
-  = { colors :: Generator -> String
+type Props
+  = { colors :: Map Generator String
     , scale :: { x :: Number, y :: Number }
     , id :: String
     , style :: Style
+    , diagram :: Diagram
+    , layout :: Layout
     }
 
 type Style
@@ -37,43 +40,43 @@ type Style
     , crossingThickness :: Number
     }
 
-type Event
-  = Point2D Int
-
-type Point
+type PointMeta
   = { position :: Number
     , generator :: Generator
     }
 
-diagramSVG :: Partial => Context -> Layout -> Diagram -> Widget HTML { x :: Int, y :: Int }
-diagramSVG ctx layout diagram =
-  SVG.svg props
-    $ map blockElement
-    $ fromJust
-    $ (traverse <<< traverse) annotatePoint
-    $ blocks diagram
+svg2d :: Partial => Props -> JSX
+svg2d ctx =
+  SVG.svg
+    { width: show width
+    , height: show height
+    , viewBox
+    , children
+    }
   where
   blockElement = case _ of
     BlockIdentity block -> identityElement ctx block
     BlockCell block -> cellElement ctx block
 
+  children =
+    map blockElement
+      $ fromJust
+      $ (traverse <<< traverse) annotatePoint
+      $ blocks ctx.diagram
+
+  width = (fromJust (layoutPosition ctx.layout (Boundary Target) (Boundary Target)) - 1.0) * ctx.scale.x
+
+  height = toNumber (Diagram.size (Diagram.toDiagramN ctx.diagram)) * 2.0 * ctx.scale.y
+
   -- The coordinate system of SVG starts on the top border, while diagrams
   -- are layed out from the bottom. We accommodate for that by inverting the
   -- vertical coordinates and then moving the view box.
-  props =
-    [ P.width (show width)
-    , P.height (show height)
-    , P.viewBox $ "0 " <> show (-height) <> " " <> show width <> " " <> show height
-    ]
-
-  width = (fromJust (layoutPosition layout (Boundary Target) (Boundary Target)) - 1.0) * ctx.scale.x
-
-  height = toNumber (Diagram.size (Diagram.toDiagramN diagram)) * 2.0 * ctx.scale.y
+  viewBox = "0 " <> show (-height) <> " " <> show width <> " " <> show height
 
   -- Obtain the layout X coordinate and the generator at a point in the diagram.
   annotatePoint { x, y } = do
-    position <- map (_ * ctx.scale.x) $ layoutPosition layout (Interior y) (Interior x)
-    generator <- Projection.generatorAt diagram (Interior y : Interior x : Nil)
+    position <- map (_ * ctx.scale.x) $ layoutPosition ctx.layout (Interior y) (Interior x)
+    generator <- Projection.generatorAt ctx.diagram (Interior y : Interior x : Nil)
     pure { position, generator }
 
 heightToNumber :: Height -> Number
@@ -81,9 +84,12 @@ heightToNumber = case _ of
   Regular i -> -toNumber (i * 2)
   Singular i -> -toNumber (i * 2 + 1)
 
+unsafeGetColor :: Map Generator String -> Generator -> String
+unsafeGetColor colors generator = unsafePartial $ fromJust $ Map.lookup generator colors
+
 -------------------------------------------------------------------------------
 -- | SVG element for an identity block.
-identityElement :: Context -> BlockIdentity Point -> Widget HTML Event
+identityElement :: Props -> BlockIdentity PointMeta -> JSX
 identityElement ctx { source, target, center, row, index, height } = fold [ left, right, wire ]
   where
   heights =
@@ -93,50 +99,47 @@ identityElement ctx { source, target, center, row, index, height } = fold [ left
 
   left =
     SVG.rect
-      [ P.width $ show $ center.position - source.position
-      , P.unsafeMkProp "x" $ show source.position
-      , P.unsafeMkProp "y" $ show $ min heights.source heights.target
-      , P.height $ show $ abs $ heights.target - heights.source
-      , P.fill (ctx.colors source.generator)
-      , P.stroke (ctx.colors source.generator)
-      , P.strokeWidth 1
-      ]
-      []
+      { width: show $ center.position - source.position
+      , x: show source.position
+      , y: show $ min heights.source heights.target
+      , height: show $ abs $ heights.target - heights.source
+      , fill: unsafeGetColor ctx.colors source.generator
+      , stroke: unsafeGetColor ctx.colors source.generator
+      , strokeWidth: "1"
+      }
 
   right =
     SVG.rect
-      [ P.width $ show $ target.position - center.position
-      , P.unsafeMkProp "x" $ show center.position
-      , P.unsafeMkProp "y" $ show $ min heights.source heights.target
-      , P.height $ show $ abs $ heights.target - heights.source
-      , P.fill (ctx.colors target.generator)
-      , P.stroke (ctx.colors source.generator)
-      , P.strokeWidth 1
-      ]
-      []
+      { width: show $ target.position - center.position
+      , x: show center.position
+      , y: show $ min heights.source heights.target
+      , height: show $ abs $ heights.target - heights.source
+      , fill: unsafeGetColor ctx.colors target.generator
+      , stroke: unsafeGetColor ctx.colors source.generator
+      , strokeWidth: "1"
+      }
 
   wire =
     SVG.path
-      [ P.d ("M " <> show center.position <> " " <> show heights.source <> " L " <> show center.position <> " " <> show heights.target)
-      , P.unsafeMkProp "strokeWidth" ctx.style.wireThickness
-      , P.stroke (ctx.colors center.generator)
-      ]
-      []
+      { d: "M " <> show center.position <> " " <> show heights.source <> " L " <> show center.position <> " " <> show heights.target
+      , strokeWidth: show ctx.style.wireThickness
+      , stroke: unsafeGetColor ctx.colors center.generator
+      }
 
 -------------------------------------------------------------------------------
 -- | SVG element for a cell block.
-cellElement :: Context -> BlockCell Point -> Widget HTML Event
-cellElement ctx { source, target, center, row, index } =
-  SVG.g []
-    ( [ makeMask
-      , fold $ makeSurfaces Source (Array.toUnfoldable source)
-      , fold $ makeSurfaces Target (Array.toUnfoldable target)
-      , fold $ map (makeWire Source) $ Array.sortBy (compare `on` _.depth) source
-      , fold $ map (makeWire Target) $ Array.sortBy (compare `on` _.depth) target
-      , makePoint
-      ]
-    )
+cellElement :: Props -> BlockCell PointMeta -> JSX
+cellElement ctx { source, target, center, row, index } = SVG.g { children }
   where
+  children =
+    [ makeMask
+    , fold $ makeSurfaces Source (Array.toUnfoldable source)
+    , fold $ makeSurfaces Target (Array.toUnfoldable target)
+    , fold $ map (makeWire Source) $ Array.sortBy (compare `on` _.depth) source
+    , fold $ map (makeWire Target) $ Array.sortBy (compare `on` _.depth) target
+    , makePoint
+    ]
+
   boundaryHeight :: Boundary -> Number
   boundaryHeight = case _ of
     Source -> heightToNumber (Regular row) * ctx.scale.y
@@ -158,21 +161,17 @@ cellElement ctx { source, target, center, row, index } =
     in
       Cubic s sc tc t
 
-  onClickEvent = { y: row, x: index } <$ P.onClick
-
   -----------------------------------------------------------------------------
   -- Point
   -----------------------------------------------------------------------------
-  makePoint :: Widget HTML Event
+  makePoint :: JSX
   makePoint =
     SVG.circle
-      [ P.unsafeMkProp "cx" $ show center.center.position
-      , P.unsafeMkProp "cy" $ show middleHeight
-      , P.fill (ctx.colors center.center.generator)
-      , P.unsafeMkProp "r" $ show ctx.style.pointRadius
-      , onClickEvent
-      ]
-      []
+      { cx: show center.center.position
+      , cy: show middleHeight
+      , fill: unsafeGetColor ctx.colors center.center.generator
+      , r: show ctx.style.pointRadius
+      }
 
   -----------------------------------------------------------------------------
   -- Wires
@@ -182,18 +181,16 @@ cellElement ctx { source, target, center, row, index } =
   -- curve of the wire is calculated based on the horizontal displacement of
   -- the wire's start point relative to the center point.
   -----------------------------------------------------------------------------
-  makeWire :: Boundary -> BoundaryCell Point -> Widget HTML Event
+  makeWire :: Boundary -> BoundaryCell PointMeta -> JSX
   makeWire boundary w =
     SVG.path
-      [ P.stroke (ctx.colors w.center.generator)
-      , P.unsafeMkProp "strokeWidth" ctx.style.wireThickness
-      , P.d $ "M" <> cubicPath (wireCurve boundary w.center.position center.center.position)
-      , P.fill "none"
-      , P.unsafeMkProp "strokeLinecap" "round"
-      , onClickEvent
-      , if Just w.depth == frontDepth then P.emptyProp else (P.unsafeMkProp "mask" $ "url(#" <> maskId <> ")")
-      ]
-      []
+      { stroke: unsafeGetColor ctx.colors w.center.generator
+      , strokeWidth: show ctx.style.wireThickness
+      , d: "M" <> cubicPath (wireCurve boundary w.center.position center.center.position)
+      , fill: "none"
+      , strokeLinecap: "round"
+      , mask: if Just w.depth == frontDepth then "" else "url(#" <> maskId <> ")"
+      }
 
   -----------------------------------------------------------------------------
   -- Surfaces
@@ -204,7 +201,7 @@ cellElement ctx { source, target, center, row, index } =
   -- right border of the surfaces follow the same curve as the wires that they
   -- connect.
   -----------------------------------------------------------------------------
-  makeSurfaces :: Boundary -> List (BoundaryCell Point) -> List (Widget HTML Event)
+  makeSurfaces :: Boundary -> List (BoundaryCell PointMeta) -> List JSX
   makeSurfaces boundary wires =
     let
       leftBorder = center.source.position /\ center.source.position
@@ -216,21 +213,19 @@ cellElement ctx { source, target, center, row, index } =
         $ pairsPadded leftBorder rightBorder
         $ map (\wire -> wire.center.position /\ center.center.position) wires
 
-  makeSurface :: Boundary -> Generator -> Number /\ Number -> Number /\ Number -> Widget HTML Event
+  makeSurface :: Boundary -> Generator -> Number /\ Number -> Number /\ Number -> JSX
   makeSurface boundary generator (a0 /\ a1) (b0 /\ b1) =
     SVG.path
-      [ P.d
-          $ fold
-              [ "M" <> cubicPath (cubicRev (wireCurve boundary a0 a1))
-              , "L" <> cubicPath (wireCurve boundary b0 b1)
-              , "Z"
-              ]
-      , P.fill (ctx.colors generator)
-      , P.stroke (ctx.colors generator)
-      , P.strokeWidth 1
-      , onClickEvent
-      ]
-      []
+      { d:
+          fold
+            [ "M" <> cubicPath (cubicRev (wireCurve boundary a0 a1))
+            , "L" <> cubicPath (wireCurve boundary b0 b1)
+            , "Z"
+            ]
+      , fill: unsafeGetColor ctx.colors generator
+      , stroke: unsafeGetColor ctx.colors generator
+      , strokeWidth: "1"
+      }
 
   -----------------------------------------------------------------------------
   -- Mask
@@ -240,30 +235,32 @@ cellElement ctx { source, target, center, row, index } =
   -- are then hidden in the vicinity of the front wires to give the impression
   -- of a crossing.
   -----------------------------------------------------------------------------
-  makeMask :: Widget HTML Event
+  makeMask :: JSX
   makeMask =
     guard (frontDepth /= backDepth)
-      $ SVG.defs []
-          [ SVG.mask
-              [ P._id maskId
-              , P.unsafeMkProp "maskUnits" "userSpaceOnUse"
+      $ SVG.defs
+          { children:
+              [ SVG.mask
+                  { id: maskId
+                  , maskUnits: "userSpaceOnUse"
+                  , children:
+                      [ SVG.rect { width: "100%", height: "100%", fill: "white" }
+                      , foldMap (makeMaskWire Source) $ Array.filter (\c -> Just c.depth == frontDepth) source
+                      , foldMap (makeMaskWire Target) $ Array.filter (\c -> Just c.depth == frontDepth) target
+                      ]
+                  }
               ]
-              [ SVG.rect [ P.width "100%", P.height "100%", P.fill "white" ] []
-              , foldMap (makeMaskWire Source) $ Array.filter (\c -> Just c.depth == frontDepth) source
-              , foldMap (makeMaskWire Target) $ Array.filter (\c -> Just c.depth == frontDepth) target
-              ]
-          ]
+          }
 
-  makeMaskWire :: Boundary -> BoundaryCell Point -> Widget HTML Event
+  makeMaskWire :: Boundary -> BoundaryCell PointMeta -> JSX
   makeMaskWire boundary w =
     SVG.path
-      [ P.stroke "black"
-      , P.unsafeMkProp "strokeWidth" $ show ctx.style.crossingThickness
-      , P.d $ "M" <> cubicPath (wireCurve boundary w.center.position center.center.position)
-      , P.fill "none"
-      , P.unsafeMkProp "stroke-linecap" "round"
-      ]
-      []
+      { stroke: "black"
+      , strokeWidth: show ctx.style.crossingThickness
+      , d: "M" <> cubicPath (wireCurve boundary w.center.position center.center.position)
+      , fill: "none"
+      , strokeLinecap: "round"
+      }
 
   frontDepth :: Maybe Int
   frontDepth = minimum $ map _.depth (source <> target)

@@ -119,15 +119,14 @@ let additions =
 
 
 let upstream =
-      https://github.com/purescript/package-sets/releases/download/psc-0.13.8-20200615/packages.dhall sha256:5d0cfad9408c84db0a3fdcea2d708f9ed8f64297e164dc57a7cf6328706df93a
+      https://github.com/purescript/package-sets/releases/download/psc-0.13.8-20200724/packages.dhall sha256:bb941d30820a49345a0e88937094d2b9983d939c9fd3a46969b85ce44953d7d9
 
 let overrides =
-  { typelevel-peano =
-      upstream.typelevel-peano // { version = "7e3f7d74e459d9f0c7f14d8a5c9ed2b368ecc9a8" }
-  }
+      { typelevel-peano =
+              upstream.typelevel-peano
+          //  { version = "7e3f7d74e459d9f0c7f14d8a5c9ed2b368ecc9a8" }
+      }
 
-let additions = 
-  { homotopy-core = ./core/spago.dhall as Location
-  }
+let additions = { homotopy-core = ./core/spago.dhall as Location }
 
 in  upstream // overrides // additions
