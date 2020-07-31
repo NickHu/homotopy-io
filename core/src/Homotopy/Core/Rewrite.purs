@@ -4,12 +4,13 @@ module Homotopy.Core.Rewrite where
 
 import Prelude
 
+import Control.MonadZero (empty)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Hashable (class Hashable, hash)
 import Data.Lazy (Lazy, defer, force)
 import Data.List (List(..), drop, findMap, length, take, (!!), (:))
-import Data.Maybe (fromJust)
+import Data.Maybe (Maybe, fromJust)
 import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
@@ -98,9 +99,12 @@ coneSize :: Cone -> Int
 coneSize { source } = length source
 
 slice :: Partial => Rewrite -> Int -> Rewrite
-slice (RewriteN { cones }) height =
-  fromJust
-    $ findMap (\c -> c.slices !! (height - c.index)) cones
+slice r i = fromJust $ safeSlice r i
+
+safeSlice :: Rewrite -> Int -> Maybe Rewrite
+safeSlice (RewriteN { cones }) height = findMap (\c -> c.slices !! (height - c.index)) cones
+
+safeSlice _ _ = empty
 
 targets :: Partial => Rewrite -> List Int
 targets (RewriteN { dimension: dim, cones }) = go cones 0

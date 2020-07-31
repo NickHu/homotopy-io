@@ -6,6 +6,7 @@ import Effect.Aff (launchAff_)
 import Test.Spec (describe)
 import Test.Spec.Reporter.Console (consoleReporter)
 import Test.Spec.Runner (runSpec)
+import Test.Contraction as TestContraction
 import Test.Diagram as TestDiagram
 import Test.Layout as TestLayout
 import Test.Projection as TestProjection
@@ -16,6 +17,7 @@ main :: Effect Unit
 main =
   launchAff_
     $ runSpec [ consoleReporter ] do
+        describe "Contraction" TestContraction.main
         describe "Diagram" TestDiagram.main
         describe "Layout" TestLayout.main
         describe "Normalization" TestNormalization.main

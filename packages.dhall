@@ -127,6 +127,18 @@ let overrides =
           //  { version = "7e3f7d74e459d9f0c7f14d8a5c9ed2b368ecc9a8" }
       }
 
-let additions = { homotopy-core = ./core/spago.dhall as Location }
+let additions =
+  { homotopy-core = ./core/spago.dhall as Location
+  , graphs = {
+      dependencies = [ "ordered-collections", "catenable-lists"]
+    , repo = "https://github.com/NickHu/purescript-graphs.git"
+    , version = "'decorated'"
+    }
+  , tree = {
+      dependencies = [ "free", "console", "prelude", "lists" ]
+    , repo = "https://github.com/dmbfm/purescript-tree.git"
+    , version = "v1.3.2"
+    }
+  }
 
 in  upstream // overrides // additions
