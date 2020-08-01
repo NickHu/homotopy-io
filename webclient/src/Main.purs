@@ -1,21 +1,24 @@
 module Homotopy.Webclient.Main where
 
 import Prelude
-import Data.Foldable (fold)
-import Data.List (List(..))
+import Data.Foldable (fold, intercalate)
+import Data.List (List(..), (:))
+import Data.List as List
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust, maybe)
+import Data.Monoid (guard)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
 import Effect.Exception (throw)
 import Foreign.Object as Object
-import Homotopy.Core.Common (Generator(..), Boundary(..))
+import Homotopy.Core.Common (Boundary(..), Generator(..), SliceIndex(..), Height(..))
 import Homotopy.Core.Diagram (Diagram(..), DiagramN)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Layout as Layout
-import Homotopy.Webclient.Components.PanZoom (makePanZoom)
 import Homotopy.Webclient.Components.Diagram (makeDiagram)
+import Homotopy.Webclient.Components.Icon (icon)
+import Homotopy.Webclient.Components.PanZoom (makePanZoom)
 import Homotopy.Webclient.Components.Transition (makeSwitch, cssTransition, transitionClasses)
-import Homotopy.Webclient.Diagram2D (diagramSVG)
 import Homotopy.Webclient.State (State, Action(..))
 import Homotopy.Webclient.State as State
 import Partial.Unsafe (unsafePartial)
@@ -29,11 +32,8 @@ import Web.DOM.NonElementParentNode (getElementById)
 import Web.HTML (window)
 import Web.HTML.HTMLDocument (toNonElementParentNode)
 import Web.HTML.Window (document)
-import Data.Map as Map
 
 foreign import logoSVG :: String
-
-foreign import featherIcons :: String
 
 main :: Effect Unit
 main = do
@@ -75,12 +75,74 @@ makeWorkspace :: React.Component WorkspaceProps
 makeWorkspace = do
   panZoom <- makePanZoom
   diagramView <- makeDiagramView
-  pure \props ->
-    div "workspace"
-      [ panZoom
-          { children: [ diagramView {} ]
+  pure \{ store } -> case store.state.workspace of
+    Nothing -> mempty
+    Just { path } ->
+      div "workspace"
+        [ div "workspace__breadcrumbs" [ breadcrumbs { store, path } ]
+        , div "workspace__diagram" [ panZoom { children: [ diagramView { store } ] } ]
+        ]
+
+breadcrumbs :: { path :: List SliceIndex, store :: State.Store } -> JSX
+breadcrumbs props = div classNames ([ homeBreadcrumb ] <> pathBreadcrumbs)
+  where
+  pathLength = List.length props.path
+
+  classNames =
+    intercalate " "
+      [ "slice-breadcrumbs"
+      , guard (pathLength == 0) "slice-breadcrumbs--empty"
+      ]
+
+  homeBreadcrumb =
+    D.div
+      { className: "slice-breadcrumbs__breadcrumb slice-breadcrumbs__breadcrumb--home"
+      , onClick: handler_ (props.store.dispatch (AscendSlice pathLength))
+      , children:
+          [ icon
+              { name: "layers"
+              , className: "slice-breadcrumbs__breadcrumb__home"
+              }
+          ]
+      }
+
+  pathBreadcrumbs = List.toUnfoldable $ List.mapWithIndex breadcrumb $ List.reverse props.path
+
+  breadcrumb i height =
+    fold
+      [ icon
+          { name: iconForHeight height
+          , className: "slice-breadcrumbs__separator"
+          }
+      , D.div
+          { className: "slice-breadcrumbs__breadcrumb " <> classNameForIndex i
+          , onClick: handler_ (actionForIndex i)
+          , children: [ D.text (labelForHeight height) ]
           }
       ]
+
+  actionForIndex i =
+    if i == pathLength - 1 then
+      pure unit
+    else
+      props.store.dispatch (AscendSlice (pathLength - i - 1))
+
+  iconForHeight = case _ of
+    Boundary _ -> "chevrons-right"
+    Interior (Singular _) -> "chevrons-right"
+    Interior (Regular _) -> "chevron-right"
+
+  labelForHeight = case _ of
+    Boundary Source -> "S"
+    Boundary Target -> "T"
+    Interior (Singular i) -> show i
+    Interior (Regular i) -> show i
+
+  classNameForIndex i =
+    if i == pathLength - 1 then
+      "slice-breadcrumbs__breadcrumb--active"
+    else
+      "slice-breadcrumbs__breadcrumb--inactive"
 
 -------------------------------------------------------------------------------
 type SidebarProps
@@ -114,41 +176,18 @@ sidebar { store } =
       }
 
   action { view, icon: iconName, name } =
-    div "sidebar__action"
-      [ tooltip name
-          [ icon
-              { name: iconName
-              , className: "sidebar__action__icon"
-              , onClick: handler preventDefault \_ -> store.dispatch (ToggleView view)
-              }
+    D.div
+      { className: "sidebar__action"
+      , onClick: handler preventDefault \_ -> store.dispatch (ToggleView view)
+      , children:
+          [ tooltip name
+              [ icon
+                  { name: iconName
+                  , className: "sidebar__action__icon"
+                  }
+              ]
           ]
-      ]
-
--------------------------------------------------------------------------------
-type IconProps
-  = { className :: String
-    , name :: String
-    , onClick :: EventHandler
-    }
-
-icon :: IconProps -> JSX
-icon props =
-  SVG.svg
-    { width: "16"
-    , height: "16"
-    , fill: "none"
-    , stroke: "currentColor"
-    , strokeWidth: "2"
-    , strokeLinecap: "round"
-    , strokeLinejoin: "round"
-    , className: props.className
-    , onClick: props.onClick
-    , children:
-        [ SVG.use
-            { xlinkHref: featherIcons <> "#" <> props.name
-            }
-        ]
-    }
+      }
 
 -------------------------------------------------------------------------------
 type DrawerProps
@@ -219,55 +258,32 @@ makeUserDrawer = do
           }
 
 -------------------------------------------------------------------------------
-makeDiagramView :: React.Component {}
+makeDiagramView :: React.Component { store :: State.Store }
 makeDiagramView = do
   diagramComp <- makeDiagram
-  pure \_ ->
-    diagramComp
-      { id: "diagram"
-      , scale: { x: 50.0, y: 50.0 }
-      , style2d:
-          { pointRadius: 4.0
-          , wireThickness: 3.0
-          , crossingThickness: 6.0
-          }
-      , colors:
-          Map.fromFoldable
-            [ Generator { id: 0, dimension: 0 } /\ "lightgray"
-            , Generator { id: 1, dimension: 1 } /\ "black"
-            , Generator { id: 2, dimension: 2 } /\ "blue"
-            , Generator { id: 3, dimension: 3 } /\ "red"
-            ]
-      , diagram: Diagram.source associativity
-      }
-
-associativity :: DiagramN
-associativity =
-  let
-    attach b e s l = unsafePartial $ fromJust $ Diagram.attach b e s l
-
-    x = Generator { id: 0, dimension: 0 }
-
-    f = Generator { id: 1, dimension: 1 }
-
-    m = Generator { id: 2, dimension: 2 }
-
-    a = Generator { id: 3, dimension: 3 }
-
-    fd = Diagram.fromGenerator (Diagram0 x) (Diagram0 x) f
-
-    ffd = attach Target Nil fd fd
-
-    md = Diagram.fromGenerator (DiagramN ffd) (DiagramN fd) m
-
-    mfd = attach Target Nil fd md
-
-    ld = attach Target Nil md mfd
-
-    fmd = attach Source Nil fd md
-
-    rd = attach Target Nil md fmd
-
-    ad = Diagram.fromGenerator (DiagramN ld) (DiagramN rd) a
-  in
-    ad
+  pure \{ store } -> case store.state.workspace of
+    Nothing -> mempty
+    Just { diagram, path } ->
+      diagramComp
+        { id: "diagram"
+        , scale: { x: 50.0, y: 50.0 }
+        , style2d:
+            { pointRadius: 4.0
+            , wireThickness: 3.0
+            , crossingThickness: 6.0
+            }
+        , colors:
+            Map.fromFoldable
+              [ Generator { id: 0, dimension: 0 } /\ "lightgray"
+              , Generator { id: 1, dimension: 1 } /\ "black"
+              , Generator { id: 2, dimension: 2 } /\ "blue"
+              , Generator { id: 3, dimension: 3 } /\ "red"
+              ]
+        , diagram: unsafePartial $ fromJust $ followPath (List.reverse path) diagram
+        , onSliceSelect: \index -> store.dispatch (DescendSlice index)
+        }
+  where
+  followPath = case _, _ of
+    Nil, diagram -> Just diagram
+    i : is, DiagramN diagram -> Diagram.sliceAt diagram i >>= followPath is
+    _ : _, Diagram0 _ -> Nothing
