@@ -1,29 +1,36 @@
 module Homotopy.Webclient.Components.Diagram.SVG2D (Props, Style, svg2d) where
 
-import Homotopy.Webclient.Blocks
 import Prelude
 import Data.Array as Array
-import Data.Foldable (fold, foldMap, maximum, minimum)
+import Data.Foldable (fold, foldMap, maximum, minimum, traverse_)
 import Data.Function (on)
-import Data.Int (toNumber)
+import Data.Int (ceil, toNumber)
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromJust)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe)
 import Data.Monoid (guard)
 import Data.Traversable (traverse)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\), type (/\))
+import Effect (Effect)
 import Homotopy.Core.Common (Boundary(..), Generator, Height(..), SliceIndex(..))
-import Homotopy.Core.Diagram (Diagram)
+import Homotopy.Core.Diagram (Diagram, DiagramN)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Layout (Layout, layoutPosition)
 import Homotopy.Core.Projection as Projection
+import Homotopy.Webclient.Blocks (Block(..), BlockIdentity, BlockCell, BoundaryCell, Point2D)
+import Homotopy.Webclient.Blocks as Blocks
 import Math (abs)
 import Partial.Unsafe (unsafePartial)
 import React.Basic (JSX)
+import React.Basic.DOM.Events (clientY, currentTarget)
 import React.Basic.DOM.SVG as SVG
+import React.Basic.Events (EventHandler, handler, handler_, merge)
+import Unsafe.Coerce (unsafeCoerce)
+import Web.Event.EventTarget (EventTarget)
+import Web.HTML.HTMLElement as HTMLElement
 
 type Props
   = { colors :: Map Generator String
@@ -32,6 +39,7 @@ type Props
     , style :: Style
     , diagram :: Diagram
     , layout :: Layout
+    , onClick :: { x :: Int, y :: Int } -> Effect Unit
     }
 
 type Style
@@ -58,26 +66,69 @@ svg2d ctx =
     BlockIdentity block -> identityElement ctx block
     BlockCell block -> cellElement ctx block
 
-  children =
+  children = [ leftBoundary, rightBoundary ] <> content
+
+  blocks =
+    fold
+      [ (map <<< map) (\{ x, y } -> { x: Interior x, y: Interior y }) $ Blocks.blocks ctx.diagram
+      , map BlockIdentity $ Blocks.boundaryBlocks Source ctx.diagram
+      , map BlockIdentity $ Blocks.boundaryBlocks Target ctx.diagram
+      ]
+
+  content =
     map blockElement
       $ fromJust
-      $ (traverse <<< traverse) annotatePoint
-      $ blocks ctx.diagram
+      $ (traverse <<< traverse) annotatePoint blocks
 
-  width = (fromJust (layoutPosition ctx.layout (Boundary Target) (Boundary Target)) - 1.0) * ctx.scale.x
+  width = (fromJust (layoutPosition ctx.layout (Boundary Target) (Boundary Target)) + 1.0) * ctx.scale.x
 
-  height = toNumber (Diagram.size (Diagram.toDiagramN ctx.diagram)) * 2.0 * ctx.scale.y
+  height = toNumber (Diagram.size (Diagram.toDiagramN ctx.diagram) + 1) * 2.0 * ctx.scale.y
 
   -- The coordinate system of SVG starts on the top border, while diagrams
   -- are layed out from the bottom. We accommodate for that by inverting the
   -- vertical coordinates and then moving the view box.
-  viewBox = "0 " <> show (-height) <> " " <> show width <> " " <> show height
+  viewBox = show (-ctx.scale.x) <> " " <> show (-height + ctx.scale.y) <> " " <> show width <> " " <> show height
 
   -- Obtain the layout X coordinate and the generator at a point in the diagram.
   annotatePoint { x, y } = do
-    position <- map (_ * ctx.scale.x) $ layoutPosition ctx.layout (Interior y) (Interior x)
-    generator <- Projection.generatorAt ctx.diagram (Interior y : Interior x : Nil)
+    position <- map (_ * ctx.scale.x) $ layoutPosition ctx.layout y x
+    generator <- Projection.generatorAt ctx.diagram (y : x : Nil)
     pure { position, generator }
+
+  leftBoundary =
+    SVG.rect
+      { width: show ctx.scale.x
+      , height: show (height + 2.0 * ctx.scale.y)
+      , fill: unsafeGetColor ctx.colors leftGenerator
+      , stroke: unsafeGetColor ctx.colors leftGenerator
+      , strokeWidth: "1"
+      , y: show (-height)
+      , x: show (-ctx.scale.x)
+      , onClick: onClickHandler ctx (-1) leftBoundaryX
+      }
+
+  rightBoundary =
+    SVG.rect
+      { width: show ctx.scale.x
+      , height: show (height + 2.0 * ctx.scale.y)
+      , fill: unsafeGetColor ctx.colors rightGenerator
+      , stroke: unsafeGetColor ctx.colors rightGenerator
+      , strokeWidth: "1"
+      , y: show (-height)
+      , x: show (width - 2.0 * ctx.scale.x)
+      , onClick: onClickHandler ctx (-1) rightBoundaryX
+      }
+
+  leftBoundaryX = arrayInit (Diagram.size (Diagram.toDiagramN ctx.diagram) + 2) \_ -> (-1)
+
+  rightBoundaryX =
+    map (\slice -> Diagram.size (Diagram.toDiagramN slice))
+      $ paddedSingularSlices
+      $ Diagram.toDiagramN ctx.diagram
+
+  leftGenerator = unsafePartial $ fromJust $ Projection.generatorAt ctx.diagram (Boundary Source : Boundary Source : Nil)
+
+  rightGenerator = unsafePartial $ fromJust $ Projection.generatorAt ctx.diagram (Boundary Source : Boundary Target : Nil)
 
 heightToNumber :: Height -> Number
 heightToNumber = case _ of
@@ -87,15 +138,32 @@ heightToNumber = case _ of
 unsafeGetColor :: Map Generator String -> Generator -> String
 unsafeGetColor colors generator = unsafePartial $ fromJust $ Map.lookup generator colors
 
+-- | Click event handler for elements that span multiple heights, such as some
+-- | identity blocks as well as the left and right diagram border.
+onClickHandler :: Props -> Int -> Array Int -> EventHandler
+onClickHandler props row indices =
+  handler (merge { clientY, currentTarget }) \event -> do
+    rect <- boundingClientRect event.currentTarget
+    traverse_ props.onClick do
+      y <- map (\y -> Array.length indices - ceil ((y - rect.top) / (props.scale.y * 2.0))) event.clientY
+      x <- indices Array.!! y
+      pure { x, y: y + row }
+
 -------------------------------------------------------------------------------
 -- | SVG element for an identity block.
 identityElement :: Props -> BlockIdentity PointMeta -> JSX
-identityElement ctx { source, target, center, row, index, height } = fold [ left, right, wire ]
+identityElement ctx { source, target, center, row, indices } = fold [ left, right, wire ]
   where
   heights =
     { source: heightToNumber (Regular row) * ctx.scale.y
     , target: heightToNumber (Regular (row + height)) * ctx.scale.y
     }
+
+  index = fromMaybe 0 (Array.head indices)
+
+  height = Array.length indices
+
+  onClick = onClickHandler ctx row indices
 
   left =
     SVG.rect
@@ -106,6 +174,7 @@ identityElement ctx { source, target, center, row, index, height } = fold [ left
       , fill: unsafeGetColor ctx.colors source.generator
       , stroke: unsafeGetColor ctx.colors source.generator
       , strokeWidth: "1"
+      , onClick
       }
 
   right =
@@ -117,6 +186,7 @@ identityElement ctx { source, target, center, row, index, height } = fold [ left
       , fill: unsafeGetColor ctx.colors target.generator
       , stroke: unsafeGetColor ctx.colors source.generator
       , strokeWidth: "1"
+      , onClick
       }
 
   wire =
@@ -124,6 +194,8 @@ identityElement ctx { source, target, center, row, index, height } = fold [ left
       { d: "M " <> show center.position <> " " <> show heights.source <> " L " <> show center.position <> " " <> show heights.target
       , strokeWidth: show ctx.style.wireThickness
       , stroke: unsafeGetColor ctx.colors center.generator
+      , strokeLinecap: "round"
+      , onClick
       }
 
 -------------------------------------------------------------------------------
@@ -161,6 +233,8 @@ cellElement ctx { source, target, center, row, index } = SVG.g { children }
     in
       Cubic s sc tc t
 
+  onClick = handler_ (ctx.onClick { x: index, y: row })
+
   -----------------------------------------------------------------------------
   -- Point
   -----------------------------------------------------------------------------
@@ -171,6 +245,7 @@ cellElement ctx { source, target, center, row, index } = SVG.g { children }
       , cy: show middleHeight
       , fill: unsafeGetColor ctx.colors center.center.generator
       , r: show ctx.style.pointRadius
+      , onClick
       }
 
   -----------------------------------------------------------------------------
@@ -190,6 +265,7 @@ cellElement ctx { source, target, center, row, index } = SVG.g { children }
       , fill: "none"
       , strokeLinecap: "round"
       , mask: if Just w.depth == frontDepth then "" else "url(#" <> maskId <> ")"
+      , onClick
       }
 
   -----------------------------------------------------------------------------
@@ -225,6 +301,7 @@ cellElement ctx { source, target, center, row, index } = SVG.g { children }
       , fill: unsafeGetColor ctx.colors generator
       , stroke: unsafeGetColor ctx.colors generator
       , strokeWidth: "1"
+      , onClick
       }
 
   -----------------------------------------------------------------------------
@@ -299,3 +376,16 @@ cubicRev (Cubic s sc tc t) = Cubic t tc sc s
 
 svgPoint :: Point2D Number -> String
 svgPoint { x, y } = show x <> " " <> show y
+
+boundingClientRect :: EventTarget -> Effect HTMLElement.DOMRect
+boundingClientRect = -- SVG elements are not recognized as HTMLElements.
+  HTMLElement.getBoundingClientRect <<< unsafeCoerce
+
+paddedSingularSlices :: DiagramN -> Array Diagram
+paddedSingularSlices diagram = [ source ] <> slices <> [ target ]
+  where
+  slices = List.toUnfoldable (Diagram.singularSlices diagram)
+
+  source = Diagram.source diagram
+
+  target = Diagram.target diagram

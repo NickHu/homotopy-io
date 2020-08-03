@@ -28,6 +28,7 @@ type DiagramProps
     , style2d :: SVG2D.Style
     , colors :: Map Generator String
     , onSliceSelect :: SliceIndex -> Effect Unit
+    , onClick :: { x :: Int, y :: Int } -> Effect Unit
     }
 
 makeDiagram :: React.Component DiagramProps
@@ -50,6 +51,7 @@ makeDiagram2D =
               , style: props.style2d
               , colors: props.colors
               , id: props.id
+              , onClick: props.onClick
               , diagram: props.diagram
               , layout: fromJust layout
               }
@@ -84,7 +86,7 @@ sliceControls props =
     , children:
         map sliceButton
           $ Array.reverse
-          $ Array.range 0 (props.sliceNumber * 2)
+          $ Array.range (-1) (props.sliceNumber * 2 + 1)
     }
   where
   sliceButton i =

@@ -32,11 +32,11 @@ data Layout
 
 layoutPosition :: Layout -> SliceIndex -> SliceIndex -> Maybe Number
 layoutPosition l@(Layout layout) = case _, _ of
-  position, Boundary Source -> layoutPosition l position (Interior (Regular 0))
-  position, Boundary Target -> layoutPosition l position (Interior (Regular layout.sliceCount))
-  Boundary Source, _ -> Just (-1.0)
-  Boundary Target, _ -> Just (layout.maximumX + 1.0)
-  Interior x, Interior y -> Map.lookup (Point2D x y) layout.positions
+  Boundary Source, position -> layoutPosition l (Interior (Regular 0)) position
+  Boundary Target, position -> layoutPosition l (Interior (Regular layout.sliceCount)) position
+  _, Boundary Source -> Just (-1.0)
+  _, Boundary Target -> Just (layout.maximumX + 1.0)
+  Interior y, Interior x -> Map.lookup (Point2D y x) layout.positions
 
 data Point2D
   = Point2D Height Height

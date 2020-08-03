@@ -19,7 +19,8 @@ import React.Basic.Events (EventFn, EventHandler, SyntheticEvent, handler, merge
 import React.Basic.Hooks as React
 import Web.DOM (Node)
 import Web.Event.Event as WebEvent
-import Web.HTML.HTMLElement (fromNode, getBoundingClientRect)
+import Web.Event.Internal.Types (EventTarget)
+import Web.HTML.HTMLElement (DOMRect, fromNode, fromEventTarget, getBoundingClientRect)
 
 -------------------------------------------------------------------------------
 type PanZoomProps

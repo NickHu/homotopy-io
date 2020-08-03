@@ -9,6 +9,7 @@ import Data.Maybe (Maybe(..), fromJust, maybe)
 import Data.Monoid (guard)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
+import Effect.Console (logShow)
 import Effect.Exception (throw)
 import Foreign.Object as Object
 import Homotopy.Core.Common (Boundary(..), Generator(..), SliceIndex(..), Height(..))
@@ -281,6 +282,7 @@ makeDiagramView = do
               ]
         , diagram: unsafePartial $ fromJust $ followPath (List.reverse path) diagram
         , onSliceSelect: \index -> store.dispatch (DescendSlice index)
+        , onClick: logShow
         }
   where
   followPath = case _, _ of

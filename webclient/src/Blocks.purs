@@ -6,6 +6,7 @@ module Homotopy.Webclient.Blocks
   , SingularCell
   , Point2D
   , blocks
+  , boundaryBlocks
   ) where
 
 import Prelude
@@ -18,8 +19,8 @@ import Data.List as List
 import Data.Maybe (Maybe(..), fromJust, fromMaybe)
 import Data.Newtype (unwrap)
 import Data.Traversable (class Traversable, sequenceDefault, traverse)
-import Homotopy.Core.Common (Height(..), SliceIndex(..))
-import Homotopy.Core.Diagram (Diagram(..))
+import Homotopy.Core.Common (Boundary(..), Height(..), SliceIndex(..))
+import Homotopy.Core.Diagram (Diagram(..), DiagramN)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Interval as Interval
 import Homotopy.Core.Projection as Projection
@@ -34,9 +35,8 @@ type BlockIdentity a
   = { source :: a
     , target :: a
     , center :: a
-    , index :: Int
+    , indices :: Array Int
     , row :: Int
-    , height :: Int
     }
 
 type BlockCell a
@@ -89,11 +89,11 @@ traverseBlock go = case _ of
     target <- f cell.target
     in { source, center, target, depth }
 
-  traverseBlockIdentity f block@{ row, index, height } = ado
+  traverseBlockIdentity f block@{ row, indices } = ado
     source <- f block.source
     center <- f block.center
     target <- f block.target
-    in { source, center, target, row, index, height }
+    in { source, center, target, row, indices }
 
 instance blockFunctor :: Functor Block where
   map f = unwrap <<< traverseBlock (Identity <<< f)
@@ -124,8 +124,7 @@ blockAt d@(DiagramN diagram) { x, y } =
     BlockIdentity
       ( union centerCell
           { row: y
-          , index: x
-          , height: 1
+          , indices: [ x ]
           }
       )
   where
@@ -163,6 +162,28 @@ singularPoints (DiagramN diagram) =
     $ mapWithIndex (\y slice -> arrayInit (Diagram.size $ Diagram.toDiagramN slice) { y, x: _ })
     $ List.toUnfoldable
     $ Diagram.singularSlices diagram
+
+boundaryBlocks :: Partial => Boundary -> Diagram -> Array (BlockIdentity (Point2D SliceIndex))
+boundaryBlocks boundary (DiagramN diagram) = blocks_
+  where
+  slice =
+    Diagram.toDiagramN
+      $ case boundary of
+          Source -> Diagram.source diagram
+          Target -> Diagram.target diagram
+
+  row = case boundary of
+    Source -> (-1)
+    Target -> (Diagram.size diagram)
+
+  blocks_ =
+    arrayInit (Diagram.size slice) \x ->
+      { row
+      , indices: [ x ]
+      , source: { x: Interior (Regular x), y: Boundary boundary }
+      , center: { x: Interior (Singular x), y: Boundary boundary }
+      , target: { x: Interior (Regular (x + 1)), y: Boundary boundary }
+      }
 
 arrayInit :: forall a. Int -> (Int -> a) -> Array a
 arrayInit n f = if n == 0 then [] else map f (Array.range 0 (n - 1))
