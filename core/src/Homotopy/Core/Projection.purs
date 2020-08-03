@@ -11,11 +11,11 @@ import Homotopy.Core.Rewrite (Rewrite)
 import Homotopy.Core.Rewrite as Rewrite
 import Partial (crash)
 import Partial.Unsafe (unsafePartial)
-import Prelude (bind, map, min, pure, ($), (+), (>=), (<=))
+import Prelude (bind, map, min, pure, ($), (+), (>=), (<))
 
 pointDepth :: Diagram -> Int -> Maybe Int
 pointDepth diagram _
-  | Diagram.dimension diagram <= 3 = Just 0
+  | Diagram.dimension diagram < 2 = Just 0
 
 pointDepth (DiagramN diagram) height = unsafePartial $ minMaybe forward backward
   where
