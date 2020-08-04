@@ -273,6 +273,13 @@ makeDiagramView = do
             , wireThickness: 3.0
             , crossingThickness: 6.0
             }
+        , style1d:
+            { pointRadius: 4.0
+            , wireThickness: 3.0
+            }
+        , style0d:
+            { pointRadius: 4.0
+            }
         , colors:
             Map.fromFoldable
               [ Generator { id: 0, dimension: 0 } /\ "lightgray"

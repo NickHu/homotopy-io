@@ -12,12 +12,12 @@ import Homotopy.Core.Diagram (Diagram)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Layout as Layout
 import Homotopy.Webclient.Components.Diagram.SVG2D as SVG2D
+import Homotopy.Webclient.Components.Diagram.SVG1D as SVG1D
+import Homotopy.Webclient.Components.Diagram.SVG0D as SVG0D
 import Homotopy.Webclient.Components.Icon (icon)
-import Homotopy.Webclient.Components.Icon as Icon
 import Partial.Unsafe (unsafePartial)
 import React.Basic (JSX)
 import React.Basic.DOM as D
-import React.Basic.DOM.Internal (css)
 import React.Basic.Events (handler_)
 import React.Basic.Hooks as React
 
@@ -26,6 +26,8 @@ type DiagramProps
     , id :: String
     , scale :: { x :: Number, y :: Number }
     , style2d :: SVG2D.Style
+    , style1d :: SVG1D.Style
+    , style0d :: SVG0D.Style
     , colors :: Map Generator String
     , onSliceSelect :: SliceIndex -> Effect Unit
     , onClick :: { x :: Int, y :: Int } -> Effect Unit
@@ -35,9 +37,61 @@ makeDiagram :: React.Component DiagramProps
 makeDiagram = do
   diagram2d <- React.memo makeDiagram2D
   pure \props -> case Diagram.dimension props.diagram of
-    0 -> D.text "0-dim"
-    1 -> D.text "1-dim"
+    0 -> diagram0d props
+    1 -> diagram1d props
     _ -> React.element diagram2d props
+
+diagram0d :: DiagramProps -> JSX
+diagram0d props =
+  let
+    diagram =
+      unsafePartial
+        $ SVG0D.svg0d
+            { style: props.style0d
+            , colors: props.colors
+            , diagram: props.diagram
+            , scale: props.scale
+            }
+  in
+    D.div
+      { className: "diagram"
+      , children:
+          [ D.div
+              { className: "diagram__content"
+              , children: [ diagram ]
+              }
+          ]
+      }
+
+diagram1d :: DiagramProps -> JSX
+diagram1d props =
+  let
+    diagram =
+      unsafePartial
+        $ SVG1D.svg1d
+            { style: props.style1d
+            , colors: props.colors
+            , diagram: props.diagram
+            , scale: props.scale
+            }
+
+    sliceControls_ =
+      unsafePartial
+        $ sliceControls
+            { sliceNumber: Diagram.size $ Diagram.toDiagramN props.diagram
+            , onSelect: props.onSliceSelect
+            }
+  in
+    D.div
+      { className: "diagram"
+      , children:
+          [ D.div
+              { className: "diagram__content"
+              , children: [ diagram ]
+              }
+          , sliceControls_
+          ]
+      }
 
 makeDiagram2D :: Effect (React.ReactComponent DiagramProps)
 makeDiagram2D =
