@@ -1,38 +1,40 @@
 module Homotopy.Webclient.Main where
 
 import Prelude
-import Data.Foldable (fold, intercalate)
+import Data.Foldable (fold, intercalate, sequence_)
 import Data.List (List(..), (:))
 import Data.List as List
+import Data.Map (Map)
 import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust, maybe)
 import Data.Monoid (guard)
 import Data.Tuple.Nested ((/\))
 import Effect (Effect)
-import Effect.Console (logShow)
+import Effect.Console (log, logShow)
 import Effect.Exception (throw)
 import Foreign.Object as Object
 import Homotopy.Core.Common (Boundary(..), Generator(..), SliceIndex(..), Height(..))
-import Homotopy.Core.Diagram (Diagram(..), DiagramN)
+import Homotopy.Core.Diagram (Diagram(..))
 import Homotopy.Core.Diagram as Diagram
-import Homotopy.Core.Layout as Layout
 import Homotopy.Webclient.Components.Diagram (makeDiagram)
 import Homotopy.Webclient.Components.Icon (icon)
 import Homotopy.Webclient.Components.PanZoom (makePanZoom)
-import Homotopy.Webclient.Components.Transition (makeSwitch, cssTransition, transitionClasses)
-import Homotopy.Webclient.State (State, Action(..))
+import Homotopy.Webclient.Components.Transition (makeSwitch)
+import Homotopy.Webclient.State (Action(..))
 import Homotopy.Webclient.State as State
 import Partial.Unsafe (unsafePartial)
-import React.Basic (JSX, ReactComponent, element)
+import React.Basic (JSX)
 import React.Basic.DOM as D
 import React.Basic.DOM.Events (preventDefault)
-import React.Basic.DOM.SVG as SVG
-import React.Basic.Events (EventHandler, handler, handler_)
+import React.Basic.Events (handler, handler_)
 import React.Basic.Hooks as React
 import Web.DOM.NonElementParentNode (getElementById)
+import Web.Event.Event (EventType(..))
+import Web.Event.EventTarget (addEventListener, eventListener, removeEventListener)
 import Web.HTML (window)
-import Web.HTML.HTMLDocument (toNonElementParentNode)
+import Web.HTML.HTMLDocument as HTMLDocument
 import Web.HTML.Window (document)
+import Web.UIEvent.KeyboardEvent as KeyboardEvent
 
 foreign import logoSVG :: String
 
@@ -41,7 +43,7 @@ main = do
   container <-
     ( window
         >>= document
-        >>> map toNonElementParentNode
+        >>> map HTMLDocument.toNonElementParentNode
         >>= getElementById "app"
         >>= maybe (throw "Missing #app element.") pure
     )
@@ -50,11 +52,21 @@ main = do
 
 makeApp :: React.Component {}
 makeApp = do
-  reducer <- React.mkReducer State.reduce
+  reducer <- React.mkReducer \state action -> State.reduce action state
   mainDrawer <- makeMainDrawer
   workspace <- makeWorkspace
   React.component "App" \_ -> React.do
     state /\ dispatch <- React.useReducer State.initial reducer
+    shortcuts <-
+      React.useMemo unit \_ ->
+        Map.fromFoldable
+          [ "i" /\ dispatch IdentityDiagram
+          , "c" /\ dispatch ClearWorkspace
+          , "s" /\ dispatch (MakeBoundary Source)
+          , "t" /\ dispatch (MakeBoundary Target)
+          , "r" /\ dispatch RestrictDiagram
+          ]
+    useKeyboardShortcuts shortcuts
     let
       store = { dispatch, state }
     pure
@@ -66,6 +78,22 @@ makeApp = do
 
 div :: String -> Array JSX -> JSX
 div className children = D.div { className, children }
+
+-------------------------------------------------------------------------------
+useKeyboardShortcuts :: Map String (Effect Unit) -> React.Hook _ Unit
+useKeyboardShortcuts shortcuts =
+  -- By using `UnsafeReference` the event listener is only updated when one of
+  -- the handlers is different by reference equality.
+  React.useEffect (map React.UnsafeReference shortcuts) do
+    log "Attach event handlers"
+    target <- window >>= document >>> map HTMLDocument.toEventTarget
+    listener <-
+      eventListener \event ->
+        sequence_ do
+          keyboardEvent <- KeyboardEvent.fromEvent event
+          Map.lookup (KeyboardEvent.key keyboardEvent) shortcuts
+    addEventListener (EventType "keydown") listener false target
+    pure (removeEventListener (EventType "keydown") listener false target)
 
 -------------------------------------------------------------------------------
 type WorkspaceProps
