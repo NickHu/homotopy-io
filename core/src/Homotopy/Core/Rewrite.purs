@@ -8,7 +8,7 @@ import Data.Maybe (fromJust)
 import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
-import Prelude (class Eq, class Semigroup, class Show, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
+import Prelude --(class Eq, class Semigroup, class Show, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -22,8 +22,20 @@ derive instance eqRewrite :: Eq Rewrite
 
 derive instance genericRewrite :: Generic Rewrite _
 
+r0 :: Generator -> Generator -> Rewrite
+r0 a b = Rewrite0 { source: a, target: b }
+
+rI :: Rewrite
+rI = RewriteI
+
+rN :: Int -> List Cone -> Rewrite
+rN a b = RewriteN { dimension: a, cones: b }
+
 instance showRewrite :: Show Rewrite where
-  show x = genericShow x
+  --show = genericShow
+  show (Rewrite0 { source: s, target: t }) = "r0 (" <> show s <> ") (" <> show t <> ")"
+  show (RewriteN { dimension: d, cones: c }) = "rN (" <> show d <> ") (" <> show c <> ")"
+  show RewriteI = "rI"
 
 -- | A pair of a forward rewrite and a backward rewrite.
 -- |
@@ -32,8 +44,10 @@ instance showRewrite :: Show Rewrite where
 -- | By contracting some levels of the shape of two diagrams such that
 -- | non-trivial parts of a diagram are merged with surrounding identity parts,
 -- | cospans of rewrites also encode homotopies.
-type Cospan
-  = { forward :: Rewrite, backward :: Rewrite }
+type Cospan = { forward :: Rewrite, backward :: Rewrite }
+
+s :: Rewrite -> Rewrite -> Cospan
+s x y = { forward:x, backward:x }
 
 type Cone
   = { index :: Int
@@ -41,6 +55,9 @@ type Cone
     , target :: Cospan
     , slices :: List Rewrite
     }
+
+c :: Int -> List Cospan -> Cospan -> List Rewrite -> Cone
+c w x y z = { index:w, source:x, target:y, slices:z }
 
 identity :: Int -> Rewrite
 identity 0 = RewriteI

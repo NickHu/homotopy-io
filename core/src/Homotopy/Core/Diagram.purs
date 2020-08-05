@@ -17,6 +17,8 @@ module Homotopy.Core.Diagram
   , source
   , target
   , toDiagramN
+  , d0
+  , dN
   ) where
 
 import Control.MonadPlus (guard)
@@ -33,19 +35,14 @@ import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
 import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse)
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>))
+import Prelude --(class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>))
 
 -- | A diagram is either 0-dimensional, in which case it consists of a
 -- | generator, or n-dimensional (for n > 0), in which case it has a source
 -- | $n-1$ diagram a list of (n - 1) cospans
-data Diagram
-  = Diagram0 Generator
-  | DiagramN DiagramN
+data Diagram = Diagram0 Generator | DiagramN DiagramN
 
 derive instance genericDiagram :: Generic Diagram _
-
-instance showDiagram :: Show Diagram where
-  show x = genericShow x
 
 newtype DiagramN
   = InternalDiagram { source :: Diagram, cospans :: List Cospan }
@@ -53,10 +50,22 @@ newtype DiagramN
 derive instance genericDiagramN :: Generic DiagramN _
 
 instance showDiagramN :: Show DiagramN where
-  show x = genericShow x
+  --show x = genericShow x
+  show (InternalDiagram { source: s, cospans: c }) = "dN (" <> (show s) <> ") (" <> (show c) <> ")"
+
+instance showDiagram :: Show Diagram where
+  --show x = genericShow x
+  show (Diagram0 a) = "d0 (" <> (show a) <> ")"
+  show (DiagramN a) = show a
 
 unsafeMake :: Diagram -> List Cospan -> DiagramN
 unsafeMake s cs = InternalDiagram { source: s, cospans: cs }
+
+d0 :: Generator -> Diagram
+d0 a = Diagram0 a
+
+dN :: Diagram -> List Cospan -> Diagram
+dN a b = DiagramN (InternalDiagram { source: a, cospans: b })
 
 toDiagramN :: Partial => Diagram -> DiagramN
 toDiagramN (DiagramN d) = d
