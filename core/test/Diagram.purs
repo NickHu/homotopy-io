@@ -61,5 +61,5 @@ main = do
       DiagramN result `shouldHavePoints` [ [ 0 ] /\ x, [ 1 ] /\ f, [ 2 ] /\ y, [ 3 ] /\ g, [ 4 ] /\ z ]
     it "non-compatible composition at target fails" do
       (isNothing $ attach Target Nil fd gd) `shouldEqual` true
-    it "non-comaptible composition at source fails" do
+    it "non-compatible composition at source fails" do
       (isNothing $ attach Source Nil gd fd) `shouldEqual` true
