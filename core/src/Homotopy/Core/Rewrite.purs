@@ -47,6 +47,12 @@ identity 0 = RewriteI
 
 identity dim = RewriteN { dimension: dim, cones: Nil }
 
+isIdentity :: Rewrite -> Boolean
+isIdentity = case _ of
+  RewriteI -> true
+  Rewrite0 r -> r.source == r.target
+  RewriteN r -> r.cones == Nil
+
 dimension :: Rewrite -> Int
 dimension (Rewrite0 _) = 0
 

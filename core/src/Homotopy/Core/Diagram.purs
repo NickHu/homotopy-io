@@ -17,6 +17,9 @@ module Homotopy.Core.Diagram
   , source
   , target
   , toDiagramN
+  , unsafeMake
+  , rewriteForward
+  , rewriteBackward
   ) where
 
 import Control.MonadPlus (guard)
@@ -126,29 +129,29 @@ slices d = unsafePartial $ NonEmptyList (source d :| scanl (\s r -> r s) (source
   genRewrites :: Partial => Cospan -> List (Diagram -> Diagram)
   genRewrites { forward: fw, backward: bw } = rewriteForward fw : rewriteBackward bw : Nil
 
-  rewriteForward :: Partial => Rewrite -> Diagram -> Diagram
-  rewriteForward (Rewrite0 rewrite) (Diagram0 _) = Diagram0 rewrite.target
+rewriteForward :: Partial => Rewrite -> Diagram -> Diagram
+rewriteForward (Rewrite0 rewrite) (Diagram0 _) = Diagram0 rewrite.target
 
-  rewriteForward RewriteI (Diagram0 g) = Diagram0 g
+rewriteForward RewriteI (Diagram0 g) = Diagram0 g
 
-  rewriteForward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
-    where
-    go :: List Cospan -> Int -> List Cone -> List Cospan
-    go cspans _ Nil = cspans
+rewriteForward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
+  where
+  go :: List Cospan -> Int -> List Cone -> List Cospan
+  go cspans _ Nil = cspans
 
-    go cspans i (c : cs) = go (take (c.index + i) cspans <> c.target : drop (c.index + i + coneSize c) cspans) (i - coneSize c + 1) cs
+  go cspans i (c : cs) = go (take (c.index + i) cspans <> c.target : drop (c.index + i + coneSize c) cspans) (i - coneSize c + 1) cs
 
-  rewriteBackward :: Partial => Rewrite -> Diagram -> Diagram
-  rewriteBackward (Rewrite0 rewrite) (Diagram0 _) = Diagram0 rewrite.source
+rewriteBackward :: Partial => Rewrite -> Diagram -> Diagram
+rewriteBackward (Rewrite0 rewrite) (Diagram0 _) = Diagram0 rewrite.source
 
-  rewriteBackward RewriteI (Diagram0 g) = Diagram0 g
+rewriteBackward RewriteI (Diagram0 g) = Diagram0 g
 
-  rewriteBackward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
-    where
-    go :: List Cospan -> Int -> List Cone -> List Cospan
-    go cspans _ Nil = cspans
+rewriteBackward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
+  where
+  go :: List Cospan -> Int -> List Cone -> List Cospan
+  go cspans _ Nil = cspans
 
-    go cspans i (c : cs) = go (take (c.index + i) cspans <> c.source <> drop (c.index + i + 1) cspans) (i + coneSize c - 1) cs
+  go cspans i (c : cs) = go (take (c.index + i) cspans <> c.source <> drop (c.index + i + 1) cspans) (i + coneSize c - 1) cs
 
 -- | The slice of an (n + 1)-dimensional diagram at a particular height.
 sliceAt :: DiagramN -> SliceIndex -> Maybe Diagram
