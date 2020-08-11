@@ -9,14 +9,17 @@ import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
 import Data.Map as Map
-import Data.Maybe (Maybe(..), fromJust, fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromJust, fromMaybe)
 import Data.Newtype (unwrap)
+import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\), type (/\))
 import Homotopy.Core.Diagram (Diagram(..), DiagramN)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Interval as Interval
 import Homotopy.Core.Rewrite (Cospan, Rewrite(..))
 import Homotopy.Core.Rewrite as Rewrite
+import Homotopy.Core.Normalization.Degeneracy as Degeneracy
+import Homotopy.Core.Normalization.Degeneracy (Degeneracy(..))
 import Partial.Unsafe (unsafePartial)
 
 normalize :: Diagram -> Diagram
@@ -24,13 +27,20 @@ normalize diagram = unsafePartial (normalize' diagram).diagram
 
 type InputArrow
   = { source :: Diagram
+    , degeneracy :: Degeneracy
     , rewrite :: Rewrite
     }
 
 type Output a
   = { diagram :: Diagram
     , factors :: Map a Rewrite
-    , degeneracy :: Rewrite
+    , degeneracy :: Degeneracy
+    }
+
+type Recursive a
+  = { diagram :: Diagram
+    , factors :: Map a Rewrite
+    , degeneracy :: List Degeneracy
     }
 
 data Index a
@@ -50,18 +60,18 @@ normalizeRelative inputs diagram
   | any (Rewrite.isIdentity <<< _.rewrite) inputs || Diagram.dimension diagram == 0 =
     { diagram
     , factors: map (\_ -> Rewrite.identity (Diagram.dimension diagram)) inputs
-    , degeneracy: Rewrite.identity (Diagram.dimension diagram)
+    , degeneracy: Degeneracy.identity
     }
 
 normalizeRelative inputs (DiagramN diagram) = normalizeTopLevel (normalizeRecursive regular inputs diagram)
   where
   regular = map normalize' (List.fromFoldable (Diagram.regularSlices diagram))
 
-normalizeRecursive :: forall a. Ord a => Partial => List (Output Void) -> Map a InputArrow -> DiagramN -> Output a
+normalizeRecursive :: forall a. Ord a => Partial => List (Output Void) -> Map a InputArrow -> DiagramN -> Recursive a
 normalizeRecursive regular inputs diagram =
   { diagram: DiagramN diagram'
   , factors: mapWithIndex factor inputs
-  , degeneracy: makeParallelRewrite diagram' sliceDegeneracies diagram
+  , degeneracy: sliceDegeneracies
   }
   where
   dimension = Diagram.dimension (DiagramN diagram)
@@ -74,12 +84,14 @@ normalizeRecursive regular inputs diagram =
       r0 : r1 : rs, c : cs ->
         let
           forward =
-            { rewrite: r0.degeneracy <> c.forward
+            { rewrite: c.forward
+            , degeneracy: r0.degeneracy
             , source: r0.diagram
             }
 
           backward =
-            { rewrite: r1.degeneracy <> c.backward
+            { rewrite: c.backward
+            , degeneracy: r1.degeneracy
             , source: r1.diagram
             }
         in
@@ -89,7 +101,14 @@ normalizeRecursive regular inputs diagram =
   -----------------------------------------------------------------------------
   singularSubproblems :: a -> InputArrow -> List (Index a /\ InputArrow)
   singularSubproblems i input =
-    mapWithIndex (\j source -> SingularSlice i j /\ { source, rewrite: Rewrite.slice input.rewrite j })
+    mapWithIndex
+      ( \j source ->
+          SingularSlice i j
+            /\ { source
+              , degeneracy: Degeneracy.slice input.degeneracy j
+              , rewrite: Rewrite.slice input.rewrite (Degeneracy.singularImage input.degeneracy j)
+              }
+      )
       $ Diagram.singularSlices (Diagram.toDiagramN input.source)
 
   subproblems :: List (Index a /\ InputArrow)
@@ -144,7 +163,9 @@ normalizeRecursive regular inputs diagram =
       $ mapWithIndex
           ( \targetIndex targetCospan ->
               let
-                sourceInterval = Rewrite.singularPreimage input.rewrite targetIndex
+                sourceInterval =
+                  Interval.image (Degeneracy.singularPreimage input.degeneracy)
+                    $ Rewrite.singularPreimage input.rewrite targetIndex
 
                 sourceCospans =
                   map (\sourceIndex -> fromJust $ (Diagram.cospans $ Diagram.toDiagramN input.source) List.!! sourceIndex)
@@ -164,55 +185,46 @@ normalizeRecursive regular inputs diagram =
 
   -----------------------------------------------------------------------------
   -- Assemble the parallel degeneracy maps for every singular height.
-  sliceDegeneracies :: List Rewrite
+  sliceDegeneracies :: List Degeneracy
   sliceDegeneracies =
-    map (\i -> maybe (Rewrite.identity dimension) _.degeneracy $ Map.lookup i solutions)
+    map (\i -> _.degeneracy $ fromJust $ Map.lookup i solutions)
       $ listWithLength
       $ Diagram.size diagram
 
-normalizeTopLevel :: forall a. Partial => Ord a => Output a -> Output a
+normalizeTopLevel :: forall a. Partial => Ord a => Recursive a -> Output a
 normalizeTopLevel { diagram, factors, degeneracy } =
-  { diagram: DiagramN diagram'
-  , factors: factors'
-  , degeneracy: topLevelDegeneracy <> degeneracy
+  { diagram: Diagram.rewriteBackward topLevelDegeneracy diagram
+  , factors: map removeTrivialCones factors
+  , degeneracy: Degeneracy trivialHeights (Map.fromFoldable $ mapWithIndex Tuple degeneracy)
   }
   where
+  isTrivial :: Int -> Cospan -> Boolean
+  isTrivial i cospan =
+    isIdentityCospan cospan
+      && all (\rewrite -> Interval.isEmpty (Rewrite.singularPreimage rewrite i)) factors
+
   -- find trivial heights
   trivialHeights :: List Int
   trivialHeights =
     List.mapMaybe identity
-      $ mapWithIndex
-          ( \i cospan ->
-              if isIdentityCospan cospan
-                && all (\rewrite -> Interval.isEmpty (Rewrite.singularPreimage rewrite i)) factors then
-                Just i
-              else
-                Nothing
-          )
+      $ mapWithIndex (\i cospan -> if isTrivial i cospan then Just i else Nothing)
       $ Diagram.cospans
       $ Diagram.toDiagramN diagram
 
   -- build top level degeneracy map
   topLevelDegeneracy :: Rewrite
-  topLevelDegeneracy = makeDegeneracy (Diagram.toDiagramN diagram) trivialHeights
+  topLevelDegeneracy = makeDegeneracyRewrite (Diagram.toDiagramN diagram) trivialHeights
 
-  diagram' :: DiagramN
-  diagram' = Diagram.toDiagramN $ Diagram.rewriteBackward topLevelDegeneracy diagram
-
-  -- remove trivial cones from factors
-  factors' :: Map a Rewrite
-  factors' = map removeTrivialCone factors
-
-  removeTrivialCone :: Rewrite -> Rewrite
-  removeTrivialCone (RewriteN r) = RewriteN { dimension: r.dimension, cones: go 0 r.cones }
+  removeTrivialCones :: Rewrite -> Rewrite
+  removeTrivialCones (RewriteN r) = RewriteN { dimension: r.dimension, cones: go 0 r.cones }
     where
     go offset = case _ of
       c : cs -> if (c.index + offset) `elem` trivialHeights then go (offset + 1) cs else c : go (offset + 1 - Rewrite.coneSize c) (c : cs)
       Nil -> Nil
 
 -- make parallel degeneracy map
-makeDegeneracy :: Partial => DiagramN -> List Int -> Rewrite
-makeDegeneracy diagram targets = Rewrite.RewriteN { dimension: Diagram.dimension (DiagramN diagram), cones: go 0 targets }
+makeDegeneracyRewrite :: Partial => DiagramN -> List Int -> Rewrite
+makeDegeneracyRewrite diagram targets = Rewrite.RewriteN { dimension: Diagram.dimension (DiagramN diagram), cones: go 0 targets }
   where
   cospans = Array.fromFoldable (Diagram.cospans diagram)
 
@@ -225,15 +237,6 @@ makeDegeneracy diagram targets = Rewrite.RewriteN { dimension: Diagram.dimension
       , slices: Nil
       }
         : go (offset - 1) ts
-
-makeParallelRewrite :: DiagramN -> List Rewrite -> DiagramN -> Rewrite
-makeParallelRewrite source slices target =
-  RewriteN
-    $ { dimension: Diagram.dimension (DiagramN source), cones: _ }
-    $ mapWithIndex (\i (s /\ r /\ t) -> { index: i, source: s : Nil, target: t, slices: r : Nil })
-    $ List.zip (Diagram.cospans source)
-    $ List.zip slices
-    $ Diagram.cospans target
 
 isIdentityCospan :: Cospan -> Boolean
 isIdentityCospan cospan = Rewrite.isIdentity cospan.forward && Rewrite.isIdentity cospan.backward

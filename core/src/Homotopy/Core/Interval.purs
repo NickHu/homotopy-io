@@ -1,4 +1,4 @@
-module Homotopy.Core.Interval (Interval(..), toUnfoldable, isEmpty) where
+module Homotopy.Core.Interval (Interval(..), toUnfoldable, isEmpty, image) where
 
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
@@ -29,3 +29,13 @@ toUnfoldable = unfoldr step <<< unwrap
 
 isEmpty :: Interval -> Boolean
 isEmpty (Interval interval) = interval.length == 0
+
+image :: (Int -> Interval) -> Interval -> Interval
+image f (Interval interval) =
+  case interval.length of
+    0 -> Interval { start: (unwrap (f interval.start)).start, length: 0 }
+    1 -> f interval.start
+    _ -> Interval {
+      start: (unwrap (f interval.start)).start,
+      length: (unwrap (f (interval.start + interval.length - 1))).length
+    }

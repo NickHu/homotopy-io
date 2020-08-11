@@ -9,6 +9,7 @@ import Test.Spec.Runner (runSpec)
 import Test.Diagram as TestDiagram
 import Test.Layout as TestLayout
 import Test.Projection as TestProjection
+import Test.Normalization as TestNormalization
 
 main :: Effect Unit
 main =
@@ -17,3 +18,4 @@ main =
         describe "Diagram" TestDiagram.main
         describe "Layout" TestLayout.main
         describe "Projection" TestProjection.main
+        describe "Normalization" TestNormalization.main
