@@ -1,14 +1,17 @@
 module Homotopy.Core.Rewrite where
 -- TODO: explicitly specify exports
 
+import Data.List
+import Data.Maybe
+import Homotopy.Core.Common
+import Partial.Unsafe
+import Prelude
+
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
-import Data.List (List(..), drop, findMap, length, take, (!!), (:), head)
-import Data.Maybe (fromJust)
-import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
+import Data.Newtype (traverse)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
-import Prelude --(class Eq, class Semigroup, class Show, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -94,10 +97,11 @@ cospanPad p { forward: fw, backward: bw } =
   , backward: pad p bw
   }
 
+-- | Obtain the list of targets of the cones in the target singular slice
 listConeTargets :: List Cone -> List Int
 listConeTargets Nil = Nil
 listConeTargets (h : Nil) = h.index : Nil
-listConeTargets (h : (hh : t)) = ((head prev) + h.index - hh.index - length(hh.source)) : prev where
+listConeTargets (h : (hh : t)) = ((unsafePartial $ fromJust (head prev)) + h.index - hh.index - length(hh.source)) : prev where
   prev :: List Int
   prev = listConeTargets (hh : t)
 
