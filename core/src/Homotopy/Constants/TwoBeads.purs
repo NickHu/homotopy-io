@@ -1,5 +1,5 @@
 -- Compute the diagram with two parallel 2-cell endomorphisms
-module Constants.TwoBeads (twoBeads) where
+module Homotopy.Constants.TwoBeads (twoBeads) where
 
 import Prelude
 import Data.List
