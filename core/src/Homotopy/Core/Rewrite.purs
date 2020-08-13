@@ -1,17 +1,18 @@
 module Homotopy.Core.Rewrite where
--- TODO: explicitly specify exports
 
+-- TODO: explicitly specify exports
 import Data.List
 import Data.Maybe
 import Homotopy.Core.Common
 import Partial.Unsafe
 import Prelude
-
+import Control.Comonad.Cofree (tail)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Newtype (traverse)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
+import Data.Tuple
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -35,7 +36,8 @@ instance showRewrite :: Show Rewrite where
 -- | By contracting some levels of the shape of two diagrams such that
 -- | non-trivial parts of a diagram are merged with surrounding identity parts,
 -- | cospans of rewrites also encode homotopies.
-type Cospan = { forward :: Rewrite, backward :: Rewrite }
+type Cospan
+  = { forward :: Rewrite, backward :: Rewrite }
 
 type Cone
   = { index :: Int
@@ -99,12 +101,35 @@ cospanPad p { forward: fw, backward: bw } =
 
 -- | Obtain the list of targets of the cones in the target singular slice
 listConeTargets :: List Cone -> List Int
-listConeTargets Nil = Nil
-listConeTargets (h : Nil) = h.index : Nil
-listConeTargets (h : (hh : t)) = ((unsafePartial $ fromJust (head prev)) + h.index - hh.index - length(hh.source)) : prev where
-  prev :: List Int
-  prev = listConeTargets (hh : t)
+listConeTargets x = go x --reverse $ go $ reverse x
+  where
+  go :: List Cone -> List Int
+  go Nil = Nil
 
+  go (h : Nil) = h.index : Nil
+
+  go (h : (hh : t)) =
+    ( (unsafePartial $ fromJust (head prev))
+        + 1
+        + h.index
+        - hh.index
+        - length (hh.source)
+    )
+      : prev
+    where
+    prev :: List Int
+    prev = go (hh : t)
+
+-- | Removes a cone with given singular target index, without reindexing other cones
+removeCone :: List Cone -> Int -> List Cone
+removeCone cs i =
+  map fst
+    $ filter
+        (\(Tuple _ t) -> i /= t)
+    $ zip cs (listConeTargets cs)
+
+-- | Removes a cone with given singular target index, and reindex other cones
+--removeConeReindex :: List Cone -> Int -> List Cone
 cospanReverse :: Cospan -> Cospan
 cospanReverse cospan = { forward: cospan.backward, backward: cospan.forward }
 
