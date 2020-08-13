@@ -3,7 +3,6 @@ module Homotopy.Core.Common
   , Generator(..)
   , Height(..)
   , SliceIndex(..)
-  , g
   ) where
 
 import Data.Enum (class Enum)
@@ -16,9 +15,6 @@ import Prelude (class Bounded, class Eq, class Ord, class Show, compare, show, (
 newtype Generator
   = Generator { id :: Int, dimension :: Int }
 
-g :: Int -> Int -> Generator
-g a b = Generator { id:a, dimension:b }
-
 derive instance eqGenerator :: Eq Generator
 
 derive instance ordGenerator :: Ord Generator
@@ -26,8 +22,7 @@ derive instance ordGenerator :: Ord Generator
 derive instance genericGenerator :: Generic Generator _
 
 instance showGenerator :: Show Generator where
-  --show (Generator g) = show g.id <> "!" <> show g.dimension
-  show (Generator g) = "g " <> show g.id <> " " <> show g.dimension
+  show (Generator g) = show g.id <> "!" <> show g.dimension
 
 data Height
   = Regular Int

@@ -22,20 +22,8 @@ derive instance eqRewrite :: Eq Rewrite
 
 derive instance genericRewrite :: Generic Rewrite _
 
-r0 :: Generator -> Generator -> Rewrite
-r0 a b = Rewrite0 { source: a, target: b }
-
-rI :: Rewrite
-rI = RewriteI
-
-rN :: Int -> List Cone -> Rewrite
-rN a b = RewriteN { dimension: a, cones: b }
-
 instance showRewrite :: Show Rewrite where
-  --show = genericShow
-  show (Rewrite0 { source: s, target: t }) = "r0 (" <> show s <> ") (" <> show t <> ")"
-  show (RewriteN { dimension: d, cones: c }) = "rN (" <> show d <> ") (" <> show c <> ")"
-  show RewriteI = "rI"
+  show x = genericShow x
 
 -- | A pair of a forward rewrite and a backward rewrite.
 -- |
@@ -46,18 +34,12 @@ instance showRewrite :: Show Rewrite where
 -- | cospans of rewrites also encode homotopies.
 type Cospan = { forward :: Rewrite, backward :: Rewrite }
 
-s :: Rewrite -> Rewrite -> Cospan
-s x y = { forward:x, backward:x }
-
 type Cone
   = { index :: Int
     , source :: List Cospan
     , target :: Cospan
     , slices :: List Rewrite
     }
-
-c :: Int -> List Cospan -> Cospan -> List Rewrite -> Cone
-c w x y z = { index:w, source:x, target:y, slices:z }
 
 identity :: Int -> Rewrite
 identity 0 = RewriteI

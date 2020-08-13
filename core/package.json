@@ -9,5 +9,8 @@
   "license": "MIT",
   "devDependencies": {
     "purty": "^6.2.0"
+  },
+  "dependencies": {
+    "purescript": "^0.13.8"
   }
 }

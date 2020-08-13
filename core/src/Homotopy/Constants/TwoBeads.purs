@@ -3,6 +3,7 @@ module Constants.TwoBeads (twoBeads) where
 
 import Prelude
 import Data.List
+import Homotopy.Core.MiniMake
 import Homotopy.Core.Common
 import Homotopy.Core.Diagram
 import Homotopy.Core.Rewrite

@@ -17,8 +17,7 @@ module Homotopy.Core.Diagram
   , source
   , target
   , toDiagramN
-  , d0
-  , dN
+  , unsafeMake
   ) where
 
 import Control.MonadPlus (guard)
@@ -50,22 +49,13 @@ newtype DiagramN
 derive instance genericDiagramN :: Generic DiagramN _
 
 instance showDiagramN :: Show DiagramN where
-  --show x = genericShow x
-  show (InternalDiagram { source: s, cospans: c }) = "dN (" <> (show s) <> ") (" <> (show c) <> ")"
+  show x = genericShow x
 
 instance showDiagram :: Show Diagram where
-  --show x = genericShow x
-  show (Diagram0 a) = "d0 (" <> (show a) <> ")"
-  show (DiagramN a) = show a
+  show x = genericShow x
 
 unsafeMake :: Diagram -> List Cospan -> DiagramN
 unsafeMake s cs = InternalDiagram { source: s, cospans: cs }
-
-d0 :: Generator -> Diagram
-d0 a = Diagram0 a
-
-dN :: Diagram -> List Cospan -> Diagram
-dN a b = DiagramN (InternalDiagram { source: a, cospans: b })
 
 toDiagramN :: Partial => Diagram -> DiagramN
 toDiagramN (DiagramN d) = d
