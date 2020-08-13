@@ -3,7 +3,7 @@ module Homotopy.Core.Rewrite where
 
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
-import Data.List (List(..), drop, findMap, length, take, (!!), (:))
+import Data.List (List(..), drop, findMap, length, take, (!!), (:), head)
 import Data.Maybe (fromJust)
 import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
 import Homotopy.Core.Interval (Interval(..))
@@ -93,6 +93,13 @@ cospanPad p { forward: fw, backward: bw } =
   { forward: pad p fw
   , backward: pad p bw
   }
+
+listConeTargets :: List Cone -> List Int
+listConeTargets Nil = Nil
+listConeTargets (h : Nil) = h.index : Nil
+listConeTargets (h : (hh : t)) = ((head prev) + h.index - hh.index - length(hh.source)) : prev where
+  prev :: List Int
+  prev = listConeTargets (hh : t)
 
 cospanReverse :: Cospan -> Cospan
 cospanReverse cospan = { forward: cospan.backward, backward: cospan.forward }
