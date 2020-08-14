@@ -33,13 +33,13 @@ import Data.List (List(..), concatMap, drop, head, mapWithIndex, reverse, tail, 
 import Data.List.NonEmpty (NonEmptyList(..), scanl)
 import Data.List.NonEmpty as NEL
 import Data.Maybe (Maybe(..), fromMaybe, maybe)
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.NonEmpty ((:|))
 import Data.Unfoldable (replicate)
-import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
+import Homotopy.Core.Common (Boundary(..), Generator, Height(..), SliceIndex(..))
 import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse, makeRewriteN)
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>), (<<<))
+import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<<<), (<>), (==), (>), (>=), (>>>))
 import Unsafe.Reference (unsafeRefEq)
 
 -- | A diagram is either 0-dimensional, in which case it consists of a
@@ -61,10 +61,11 @@ newtype DiagramN
   , hash :: Lazy Int
   }
 
+derive instance newtypeDiagramN :: Newtype DiagramN _
+
 derive instance genericDiagramN :: Generic DiagramN _
 
-instance showDiagramN :: Show DiagramN where
-  show x = genericShow x
+derive newtype instance showDiagramN :: Show DiagramN
 
 unsafeMake :: Diagram -> List Cospan -> DiagramN
 unsafeMake s cs =
