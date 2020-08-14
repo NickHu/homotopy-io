@@ -39,7 +39,7 @@ import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
 import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse, makeRewriteN)
 import Partial.Unsafe (unsafePartial)
-import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>))
+import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>), (<<<))
 import Unsafe.Reference (unsafeRefEq)
 
 -- | A diagram is either 0-dimensional, in which case it consists of a
@@ -196,11 +196,7 @@ regularSlices d = wrap (source :| keepOdds rest)
   source :| rest = unwrap (slices d)
 
 keepOdds :: forall a. List a -> List a
-keepOdds Nil = Nil
-
-keepOdds (_ : Nil) = Nil
-
-keepOdds (_ : x : xs) = x : keepOdds xs
+keepOdds = everyOther <<< fromMaybe Nil <<< tail
 
 everyOther :: forall a. List a -> List a
 everyOther Nil = Nil
@@ -277,6 +273,10 @@ enumerateEmbeddings n h = case n, h of
   enumerateSliceEmbeddings :: Diagram -> DiagramN -> List Embedding
   enumerateSliceEmbeddings needle haystack = join $ mapWithIndex (\i slice -> map ((:) i) (enumerateEmbeddings needle slice)) $ NEL.toList $ regularSlices haystack
 
+-- | Build diagrams from smaller diagrams. A `small` diagram is attached to a
+-- | `large` diagram, where the attachment point is determined by `boundary`
+-- | and `embedding`. `boundary` specifies the top-level dimension attachment
+-- | point and `embedding` specifies the lower dimensional coordinates.
 attach :: Boundary -> Embedding -> DiagramN -> DiagramN -> Maybe DiagramN
 attach boundary embedding small large = unsafePartial $ go (dimension (DiagramN large) - dimension (DiagramN small)) boundary
   where
