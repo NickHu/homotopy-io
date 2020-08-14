@@ -322,6 +322,7 @@ makeGenerator =
     pure
       $ D.li
           { className: "generator"
+          , onClick: handler_ $ store.dispatch (SelectGenerator generator)
           , children:
               [ D.div
                   { className: "generator__color"
@@ -394,13 +395,7 @@ makeDiagramView = do
         , style0d:
             { pointRadius: 4.0
             }
-        , colors:
-            Map.fromFoldable
-              [ Generator { id: 0, dimension: 0 } /\ "lightgray"
-              , Generator { id: 1, dimension: 1 } /\ "black"
-              , Generator { id: 2, dimension: 2 } /\ "blue"
-              , Generator { id: 3, dimension: 3 } /\ "red"
-              ]
+        , colors: map _.color store.state.signature.generators
         , diagram: unsafePartial $ fromJust $ followPath (List.reverse path) diagram
         , onSliceSelect: \index -> store.dispatch (DescendSlice index)
         , onClick: logShow

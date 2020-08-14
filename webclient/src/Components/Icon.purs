@@ -6,11 +6,13 @@ module Homotopy.Webclient.Components.Icon
   ) where
 
 import Prelude
+
 import Effect (Effect)
 import React.Basic (JSX)
 import React.Basic.DOM as D
+import React.Basic.DOM.Events (stopPropagation)
 import React.Basic.DOM.SVG as SVG
-import React.Basic.Events (handler_)
+import React.Basic.Events (handler)
 
 foreign import featherIcons :: String
 
@@ -45,7 +47,7 @@ type IconButtonProps
 iconButton :: IconButtonProps -> JSX
 iconButton props =
   D.button
-    { onClick: handler_ props.onClick
+    { onClick: handler stopPropagation \_ -> props.onClick
     , className: "icon-button " <> props.className
     , children:
         [ icon

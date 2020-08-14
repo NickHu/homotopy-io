@@ -92,11 +92,7 @@ initial =
       , abstract: ""
       }
   , view: Nothing
-  , workspace:
-      Just
-        { path: Nil
-        , diagram: DiagramN associativity
-        }
+  , workspace: Nothing
   , boundary: Nothing
   }
 
@@ -116,7 +112,7 @@ reduce action = case action of
   -- todo: when removing a generator, remove and clear everything that depends on it.
   RemoveGenerator id -> Lens.set (_generator id) Nothing
   --
-  SelectGenerator id -> \state -> state
+  SelectGenerator id -> selectGenerator id
   --
   DescendSlice index -> Lens.over _path (index : _)
   --
@@ -143,6 +139,19 @@ nextGenerator dimension state = Generator { id: go 0, dimension }
   ids = Set.map (\(Generator g) -> g.id) $ Map.keys $ state.signature.generators
 
   go id = if not (id `Set.member` ids) then id else go (id + 1)
+
+-------------------------------------------------------------------------------
+selectGenerator :: Generator -> State -> State
+selectGenerator id state = case state.workspace, Lens.view (_generator id) state of
+  Nothing, Just info ->
+    state
+      { workspace =
+        Just
+          { path: Nil
+          , diagram: info.diagram
+          }
+      }
+  _, _ -> state
 
 -------------------------------------------------------------------------------
 baseColors :: Array String
@@ -211,35 +220,3 @@ type Store
   = { state :: State
     , dispatch :: Action -> Effect Unit
     }
-
--------------------------------------------------------------------------------
-associativity :: DiagramN
-associativity =
-  let
-    attach b e s l = unsafePartial $ fromJust $ Diagram.attach b e s l
-
-    x = Generator { id: 0, dimension: 0 }
-
-    f = Generator { id: 1, dimension: 1 }
-
-    m = Generator { id: 2, dimension: 2 }
-
-    a = Generator { id: 3, dimension: 3 }
-
-    fd = Diagram.fromGenerator (Diagram0 x) (Diagram0 x) f
-
-    ffd = attach Target Nil fd fd
-
-    md = Diagram.fromGenerator (DiagramN ffd) (DiagramN fd) m
-
-    mfd = attach Target Nil fd md
-
-    ld = attach Target Nil md mfd
-
-    fmd = attach Source Nil fd md
-
-    rd = attach Target Nil md fmd
-
-    ad = Diagram.fromGenerator (DiagramN ld) (DiagramN rd) a
-  in
-    ad
