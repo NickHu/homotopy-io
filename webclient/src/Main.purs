@@ -17,7 +17,7 @@ import Homotopy.Core.Common (Boundary(..), Generator(..), SliceIndex(..), Height
 import Homotopy.Core.Diagram (Diagram(..))
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Webclient.Components.Diagram (makeDiagram)
-import Homotopy.Webclient.Components.Icon (icon)
+import Homotopy.Webclient.Components.Icon (icon, iconButton)
 import Homotopy.Webclient.Components.PanZoom (makePanZoom)
 import Homotopy.Webclient.Components.Transition (makeSwitch)
 import Homotopy.Webclient.State (Action(..))
@@ -85,7 +85,6 @@ useKeyboardShortcuts shortcuts =
   -- By using `UnsafeReference` the event listener is only updated when one of
   -- the handlers is different by reference equality.
   React.useEffect (map React.UnsafeReference shortcuts) do
-    log "Attach event handlers"
     target <- window >>= document >>> map HTMLDocument.toEventTarget
     listener <-
       eventListener \event ->
@@ -223,16 +222,32 @@ type DrawerProps
   = { title :: String
     , className :: String
     , content :: Array JSX
+    , actions :: Array DrawerActionProps
+    }
+
+type DrawerActionProps
+  = { label :: String
+    , onClick :: Effect Unit
+    , icon :: String
     }
 
 drawer :: DrawerProps -> JSX
-drawer { title, className, content } =
+drawer { title, className, content, actions } =
   div ("drawer " <> className)
     [ div "drawer__header"
         [ div "drawer__title" [ D.text title ]
+        , div "drawer__actions" (map action actions)
         ]
     , div "drawer__content" content
     ]
+  where
+  action { label, onClick, icon } =
+    iconButton
+      { label
+      , onClick
+      , icon
+      , className: "drawer__action"
+      }
 
 -------------------------------------------------------------------------------
 makeMainDrawer :: React.Component { store :: State.Store }
@@ -262,6 +277,12 @@ makeSignatureDrawer = do
           { title: "Signature"
           , className: "signature"
           , content: []
+          , actions:
+              [ { label: "Add Generator"
+                , onClick: store.dispatch MakeGenerator
+                , icon: "plus"
+                }
+              ]
           }
 
 -------------------------------------------------------------------------------
@@ -273,6 +294,7 @@ makeProjectDrawer = do
           { title: "Project"
           , className: "project"
           , content: []
+          , actions: []
           }
 
 -------------------------------------------------------------------------------
@@ -284,6 +306,7 @@ makeUserDrawer = do
           { title: "User"
           , className: "user"
           , content: []
+          , actions: []
           }
 
 -------------------------------------------------------------------------------

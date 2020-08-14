@@ -139,7 +139,7 @@ nextGenerator dimension state = Generator { id: go 0, dimension }
   where
   ids = Set.map (\(Generator g) -> g.id) $ Map.keys $ state.signature.generators
 
-  go id = if id `Set.member` ids then id else go (id + 1)
+  go id = if not (id `Set.member` ids) then id else go (id + 1)
 
 -------------------------------------------------------------------------------
 baseColors :: Array String

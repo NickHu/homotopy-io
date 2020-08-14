@@ -128,12 +128,6 @@ html, body {
     height: 48px;
   }
 
-  &__action {
-    cursor: pointer;
-    padding: 4px;
-    margin: 4px;
-  }
-
   &__content {
     padding-left: 8px;
     padding-right: 8px;
@@ -276,5 +270,24 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: center;
+  }
+}
+
+.icon-button {
+  display: inline;
+  border: none;
+  padding: 4px;
+  margin: 4px;
+  width: 24px;
+  height: 24px;
+  cursor: pointer;
+
+  @include hover-support {
+    background: lightgray;
+  }
+
+  &__icon {
+    width: 16px;
+    height: 16px;
   }
 }
