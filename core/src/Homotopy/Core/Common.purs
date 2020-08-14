@@ -8,6 +8,7 @@ module Homotopy.Core.Common
 import Data.Enum (class Enum)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Hashable (class Hashable)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
 import Prelude (class Bounded, class Eq, class Ord, class Show, compare, show, (*), (+), (-), (<>))
@@ -20,6 +21,8 @@ derive instance eqGenerator :: Eq Generator
 derive instance ordGenerator :: Ord Generator
 
 derive instance genericGenerator :: Generic Generator _
+
+derive newtype instance hashableGenerator :: Hashable Generator
 
 instance showGenerator :: Show Generator where
   show (Generator g) = show g.id <> "!" <> show g.dimension

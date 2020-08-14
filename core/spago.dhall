@@ -15,6 +15,10 @@ You can edit this file as you like.
   , "psci-support"
   , "spec"
   , "transformers"
+  , "unordered-collections"
+  , "lazy"
+  , "profunctor-lenses"
+  , "unsafe-reference"
   ]
 , packages = ../packages.dhall
 , sources = [ "src/**/*.purs", "test/**/*.purs" ]

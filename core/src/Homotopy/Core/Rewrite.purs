@@ -1,14 +1,17 @@
 module Homotopy.Core.Rewrite where
--- TODO: explicitly specify exports
 
+-- TODO: explicitly specify exports
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Hashable (class Hashable, hash)
+import Data.Lazy (Lazy, defer, force)
 import Data.List (List(..), drop, findMap, length, take, (!!), (:))
 import Data.Maybe (fromJust)
 import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
-import Prelude (class Eq, class Semigroup, class Show, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
+import Prelude
+import Unsafe.Reference (unsafeRefEq)
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -16,14 +19,42 @@ import Prelude (class Eq, class Semigroup, class Show, map, otherwise, ($), (+),
 data Rewrite
   = Rewrite0 { source :: Generator, target :: Generator }
   | RewriteI
-  | RewriteN { dimension :: Int, cones :: List Cone }
+  | RewriteN RewriteN
 
-derive instance eqRewrite :: Eq Rewrite
+instance eqRewrite :: Eq Rewrite where
+  eq = case _, _ of
+    Rewrite0 r0, Rewrite0 r1 -> r0 == r1
+    RewriteI, RewriteI -> true
+    RewriteN r0, RewriteN r1
+      | unsafeRefEq r0 r1 -> true
+      | r0.hash /= r1.hash -> false
+      | otherwise -> r0.dimension == r1.dimension && r0.cones == r1.cones
+    _, _ -> false
 
 derive instance genericRewrite :: Generic Rewrite _
 
+instance hashableRewrite :: Hashable Rewrite where
+  hash = case _ of
+    Rewrite0 r -> hash r
+    RewriteI -> 0
+    RewriteN r -> force r.hash
+
 instance showRewrite :: Show Rewrite where
   show x = genericShow x
+
+type RewriteN
+  = { dimension :: Int
+    , cones :: List Cone
+    , hash :: Lazy Int
+    }
+
+makeRewriteN :: Int -> List Cone -> Rewrite
+makeRewriteN d cs =
+  RewriteN
+    { dimension: d
+    , cones: cs
+    , hash: defer \_ -> hash { dimension: d, cones: cs }
+    }
 
 -- | A pair of a forward rewrite and a backward rewrite.
 -- |
@@ -45,7 +76,7 @@ type Cone
 identity :: Int -> Rewrite
 identity 0 = RewriteI
 
-identity dim = RewriteN { dimension: dim, cones: Nil }
+identity dim = makeRewriteN dim Nil
 
 isIdentity :: Rewrite -> Boolean
 isIdentity = case _ of
@@ -77,11 +108,7 @@ targets (RewriteN { dimension: dim, cones }) = go cones 0
   go (c : cs) i = (c.index + i) : go cs (i - length c.source + 1)
 
 pad :: List Int -> Rewrite -> Rewrite
-pad p (RewriteN { dimension: dim, cones: cs }) =
-  RewriteN
-    { dimension: dim
-    , cones: map (conePad p) cs
-    }
+pad p (RewriteN { dimension: dim, cones: cs }) = makeRewriteN dim (map (conePad p) cs)
 
 pad _ rewrite = rewrite
 
@@ -171,7 +198,7 @@ instance rewriteSemigroup :: Partial => Semigroup Rewrite where
   append (Rewrite0 { source: fs, target: ft }) (Rewrite0 { source: gs, target: gt })
     | ft == gs = Rewrite0 { source: fs, target: gt }
   append (RewriteN { dimension: fd, cones: fcs }) (RewriteN { dimension: gd, cones: gcs })
-    | fd == gd = RewriteN { dimension: fd, cones: composeCones 0 fcs gcs }
+    | fd == gd = makeRewriteN fd (composeCones 0 fcs gcs)
       where
       composeCones :: Int -> List Cone -> List Cone -> List Cone
       composeCones _ cs Nil = cs

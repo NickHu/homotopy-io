@@ -16,10 +16,10 @@ import Data.Tuple.Nested ((/\), type (/\))
 import Homotopy.Core.Diagram (Diagram(..), DiagramN)
 import Homotopy.Core.Diagram as Diagram
 import Homotopy.Core.Interval as Interval
-import Homotopy.Core.Rewrite (Cospan, Rewrite(..))
-import Homotopy.Core.Rewrite as Rewrite
-import Homotopy.Core.Normalization.Degeneracy as Degeneracy
 import Homotopy.Core.Normalization.Degeneracy (Degeneracy(..))
+import Homotopy.Core.Normalization.Degeneracy as Degeneracy
+import Homotopy.Core.Rewrite (Cospan, Rewrite(..), makeRewriteN)
+import Homotopy.Core.Rewrite as Rewrite
 import Partial.Unsafe (unsafePartial)
 
 normalize :: Diagram -> Diagram
@@ -157,8 +157,7 @@ normalizeRecursive regular inputs diagram =
   -- Assemble the factorisations for the input arrows.
   factor :: a -> InputArrow -> Rewrite
   factor i input =
-    Rewrite.RewriteN
-      $ { dimension: Diagram.dimension (DiagramN diagram), cones: _ }
+    makeRewriteN (Diagram.dimension (DiagramN diagram))
       $ List.filter (not <<< isIdentityCone)
       $ mapWithIndex
           ( \targetIndex targetCospan ->
@@ -216,7 +215,7 @@ normalizeTopLevel { diagram, factors, degeneracy } =
   topLevelDegeneracy = makeDegeneracyRewrite (Diagram.toDiagramN diagram) trivialHeights
 
   removeTrivialCones :: Rewrite -> Rewrite
-  removeTrivialCones (RewriteN r) = RewriteN { dimension: r.dimension, cones: go 0 r.cones }
+  removeTrivialCones (RewriteN r) = makeRewriteN r.dimension (go 0 r.cones)
     where
     go offset = case _ of
       c : cs -> if (c.index + offset) `elem` trivialHeights then go (offset + 1) cs else c : go (offset + 1 - Rewrite.coneSize c) (c : cs)
@@ -224,8 +223,10 @@ normalizeTopLevel { diagram, factors, degeneracy } =
 
 -- make parallel degeneracy map
 makeDegeneracyRewrite :: Partial => DiagramN -> List Int -> Rewrite
-makeDegeneracyRewrite diagram targets = Rewrite.RewriteN { dimension: Diagram.dimension (DiagramN diagram), cones: go 0 targets }
+makeDegeneracyRewrite diagram targets = makeRewriteN dimension (go 0 targets)
   where
+  dimension = Diagram.dimension (DiagramN diagram)
+
   cospans = Array.fromFoldable (Diagram.cospans diagram)
 
   go offset = case _ of

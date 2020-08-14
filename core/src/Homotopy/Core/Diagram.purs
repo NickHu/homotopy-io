@@ -23,9 +23,12 @@ module Homotopy.Core.Diagram
   ) where
 
 import Control.MonadPlus (guard)
+import Data.Eq ((/=))
 import Data.Foldable (length)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
+import Data.Hashable (class Hashable, hash)
+import Data.Lazy (Lazy, defer, force)
 import Data.List (List(..), concatMap, drop, head, mapWithIndex, reverse, tail, take, (:))
 import Data.List.NonEmpty (NonEmptyList(..), scanl)
 import Data.List.NonEmpty as NEL
@@ -34,9 +37,10 @@ import Data.Newtype (unwrap, wrap)
 import Data.NonEmpty ((:|))
 import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Height(..), SliceIndex(..), Boundary(..), Generator)
-import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse)
+import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse, makeRewriteN)
 import Partial.Unsafe (unsafePartial)
 import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<>), (==), (>), (>=), (>>>))
+import Unsafe.Reference (unsafeRefEq)
 
 -- | A diagram is either 0-dimensional, in which case it consists of a
 -- | generator, or n-dimensional (for n > 0), in which case it has a source
@@ -51,7 +55,11 @@ instance showDiagram :: Show Diagram where
   show x = genericShow x
 
 newtype DiagramN
-  = InternalDiagram { source :: Diagram, cospans :: List Cospan }
+  = InternalDiagram
+  { source :: Diagram
+  , cospans :: List Cospan
+  , hash :: Lazy Int
+  }
 
 derive instance genericDiagramN :: Generic DiagramN _
 
@@ -59,7 +67,12 @@ instance showDiagramN :: Show DiagramN where
   show x = genericShow x
 
 unsafeMake :: Diagram -> List Cospan -> DiagramN
-unsafeMake s cs = InternalDiagram { source: s, cospans: cs }
+unsafeMake s cs =
+  InternalDiagram
+    { source: s
+    , cospans: cs
+    , hash: defer \_ -> hash { source: s, cospans: cs }
+    }
 
 toDiagramN :: Partial => Diagram -> DiagramN
 toDiagramN (DiagramN d) = d
@@ -89,8 +102,20 @@ instance eqDiagram :: Eq Diagram where
   eq (DiagramN d) (DiagramN d') = d == d'
   eq _ _ = false
 
+instance hashableDiagram :: Hashable Diagram where
+  hash = case _ of
+    Diagram0 g -> hash g
+    DiagramN d -> hash d
+
 instance eqDiagramN :: Eq DiagramN where
-  eq (InternalDiagram d) (InternalDiagram d') = d.source == d'.source && d.cospans == d'.cospans
+  eq = case _, _ of
+    InternalDiagram d0, InternalDiagram d1
+      | unsafeRefEq d0 d1 -> true
+      | d0.hash /= d1.hash -> false
+      | otherwise -> d0.source == d1.source && d0.cospans == d1.cospans
+
+instance hashableDiagramN :: Hashable DiagramN where
+  hash (InternalDiagram d) = force d.hash
 
 -- | Creates a new diagram for a generator with a specified source and target.
 fromGenerator :: Diagram -> Diagram -> Generator -> DiagramN
@@ -102,17 +127,14 @@ fromGenerator s t generator = unsafeMake s (cospan : Nil)
   rewriteCone g (Diagram0 base) = Rewrite0 { source: base, target: g }
 
   rewriteCone g (DiagramN base) =
-    RewriteN
-      { dimension: dimension (DiagramN base)
-      , cones:
-          ( { index: 0
-            , source: cospans base
-            , target: { forward: rewriteCone g (source base), backward: rewriteCone g (target base) }
-            , slices: map (\sl -> rewriteCone g sl) $ singularSlices base
-            }
-              : Nil
-          )
-      }
+    makeRewriteN (dimension (DiagramN base))
+      $ ( { index: 0
+          , source: cospans base
+          , target: { forward: rewriteCone g (source base), backward: rewriteCone g (target base) }
+          , slices: map (\sl -> rewriteCone g sl) $ singularSlices base
+          }
+            : Nil
+        )
 
 -- | The source slice of an (n + 1)-dimensional diagram.
 source :: DiagramN -> Diagram
