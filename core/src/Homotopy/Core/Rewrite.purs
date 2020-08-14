@@ -3,6 +3,7 @@ module Homotopy.Core.Rewrite where
 -- TODO: explicitly specify exports
 import Data.List
 import Data.Maybe
+import Data.Tuple
 import Homotopy.Core.Common
 import Partial.Unsafe
 import Prelude
@@ -10,9 +11,9 @@ import Control.Comonad.Cofree (tail)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Newtype (traverse)
+import Data.Traversable (mapAccumL)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
-import Data.Tuple
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -67,12 +68,13 @@ slice (RewriteN { dimension: dim, cones }) height =
     $ findMap (\c -> c.slices !! (height - c.index)) cones
 
 targets :: Partial => Rewrite -> List Int
-targets (RewriteN { dimension: dim, cones }) = go cones 0
-  where
-  go :: List Cone -> Int -> List Int
-  go Nil _ = Nil
-
-  go (c : cs) i = (c.index + i) : go cs (i - length c.source + 1)
+targets (RewriteN { dimension: dim, cones }) =
+  ( mapAccumL
+        (\acc c -> { accum: (acc - (length c.source) + 1), value: (c.index + acc) })
+        0
+        cones
+    )
+    .value
 
 pad :: List Int -> Rewrite -> Rewrite
 pad p (RewriteN { dimension: dim, cones: cs }) =
@@ -99,34 +101,13 @@ cospanPad p { forward: fw, backward: bw } =
   , backward: pad p bw
   }
 
--- | Obtain the list of targets of the cones in the target singular slice
-listConeTargets :: List Cone -> List Int
-listConeTargets x = go x --reverse $ go $ reverse x
-  where
-  go :: List Cone -> List Int
-  go Nil = Nil
-
-  go (h : Nil) = h.index : Nil
-
-  go (h : (hh : t)) =
-    ( (unsafePartial $ fromJust (head prev))
-        + 1
-        + h.index
-        - hh.index
-        - length (hh.source)
-    )
-      : prev
-    where
-    prev :: List Int
-    prev = go (hh : t)
-
 -- | Removes a cone with given singular target index, without reindexing other cones
-removeCone :: List Cone -> Int -> List Cone
-removeCone cs i =
+removeCone :: Partial => Rewrite -> Int -> List Cone
+removeCone (RewriteN { dimension: dim, cones }) i =
   map fst
     $ filter
         (\(Tuple _ t) -> i /= t)
-    $ zip cs (listConeTargets cs)
+    $ zip cones (targets (RewriteN { dimension: dim, cones }))
 
 -- | Removes a cone with given singular target index, and reindex other cones
 --removeConeReindex :: List Cone -> Int -> List Cone

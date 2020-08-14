@@ -3,6 +3,7 @@ module Homotopy.Core.Common
   , Generator(..)
   , Height(..)
   , SliceIndex(..)
+  , SUC(..)
   ) where
 
 import Data.Enum (class Enum)
@@ -10,7 +11,8 @@ import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Maybe (Maybe(..))
 import Data.Tuple (Tuple(..))
-import Prelude (class Bounded, class Eq, class Ord, class Show, compare, show, (*), (+), (-), (<>))
+import Prelude --(class Bounded, class Eq, class Ord, class Show, compare, show, (*), (+), (-), (<>))
+import Unsafe.Coerce
 
 newtype Generator
   = Generator { id :: Int, dimension :: Int }
@@ -23,6 +25,10 @@ derive instance genericGenerator :: Generic Generator _
 
 instance showGenerator :: Show Generator where
   show (Generator g) = show g.id <> "!" <> show g.dimension
+
+newtype SUC = SUC (forall a c. a->c)
+instance showSUC :: Show SUC where
+  show (SUC _) = "SUC"
 
 data Height
   = Regular Int
