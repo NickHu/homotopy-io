@@ -64,6 +64,7 @@ data Action
   = ToggleView View
   | RenameGenerator Generator String
   | RecolorGenerator Generator String
+  | RemoveGenerator Generator
   | SelectGenerator Generator
   | DescendSlice SliceIndex
   | AscendSlice Int
@@ -112,6 +113,8 @@ reduce action = case action of
   RenameGenerator id name -> Lens.set (_generator id <<< _Just <<< R.name) name
   --
   RecolorGenerator id color -> Lens.set (_generator id <<< _Just <<< R.color) color
+  -- todo: when removing a generator, remove and clear everything that depends on it.
+  RemoveGenerator id -> Lens.set (_generator id) Nothing
   --
   SelectGenerator id -> \state -> state
   --

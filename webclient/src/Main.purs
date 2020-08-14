@@ -2,6 +2,7 @@ module Homotopy.Webclient.Main where
 
 import Prelude
 import Data.Foldable (fold, intercalate, sequence_)
+import Data.FoldableWithIndex (foldMapWithIndex)
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
@@ -20,12 +21,14 @@ import Homotopy.Webclient.Components.Diagram (makeDiagram)
 import Homotopy.Webclient.Components.Icon (icon, iconButton)
 import Homotopy.Webclient.Components.PanZoom (makePanZoom)
 import Homotopy.Webclient.Components.Transition (makeSwitch)
-import Homotopy.Webclient.State (Action(..))
+import Homotopy.Webclient.State (Action(..), GeneratorInfo)
 import Homotopy.Webclient.State as State
 import Partial.Unsafe (unsafePartial)
 import React.Basic (JSX)
+import React.Basic (ReactComponent, elementKeyed) as React
 import React.Basic.DOM as D
 import React.Basic.DOM.Events (preventDefault)
+import React.Basic.DOM.Internal (css)
 import React.Basic.Events (handler, handler_)
 import React.Basic.Hooks as React
 import Web.DOM.NonElementParentNode (getElementById)
@@ -271,17 +274,77 @@ makeMainDrawer = do
 -------------------------------------------------------------------------------
 makeSignatureDrawer :: React.Component { store :: State.Store }
 makeSignatureDrawer = do
+  signature <- makeSignature
   React.component "SignatureDrawer" \{ store } ->
     pure
       $ drawer
           { title: "Signature"
           , className: "signature"
-          , content: []
+          , content: [ signature { store } ]
           , actions:
               [ { label: "Add Generator"
                 , onClick: store.dispatch MakeGenerator
                 , icon: "plus"
                 }
+              ]
+          }
+
+makeSignature :: React.Component { store :: State.Store }
+makeSignature = do
+  generator <- makeGenerator
+  React.component "Signature" \{ store } ->
+    pure
+      $ D.ul
+          { className: "signature__generators"
+          , children:
+              [ foldMapWithIndex
+                  ( \id info ->
+                      React.elementKeyed generator
+                        { key: show id
+                        , generator: id
+                        , info
+                        , store
+                        }
+                  )
+                  store.state.signature.generators
+              ]
+          }
+
+type GeneratorProps
+  = { generator :: Generator
+    , info :: GeneratorInfo
+    , store :: State.Store
+    }
+
+makeGenerator :: Effect (React.ReactComponent GeneratorProps)
+makeGenerator =
+  React.reactComponent "Generator" \{ generator, info, store } ->
+    pure
+      $ D.li
+          { className: "generator"
+          , children:
+              [ D.div
+                  { className: "generator__color"
+                  , style:
+                      D.css
+                        { background: info.color
+                        }
+                  }
+              , div "generator__name" [ D.text info.name ]
+              , div "generator__actions"
+                  [ iconButton
+                      { onClick: pure unit
+                      , label: "Edit"
+                      , icon: "edit"
+                      , className: ""
+                      }
+                  , iconButton
+                      { onClick: store.dispatch (RemoveGenerator generator)
+                      , label: "Remove"
+                      , icon: "trash"
+                      , className: ""
+                      }
+                  ]
               ]
           }
 

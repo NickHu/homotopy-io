@@ -81,6 +81,39 @@ html, body {
 
 .signature {
   width: 256px;
+
+  &__generators {
+    flex: 1;
+    display: block;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 0;
+    margin: 0;
+    scrollbar-width: thin;
+    scrollbar-color: lightgray;
+  }
+}
+
+.generator {
+  display: flex;
+  margin: 0;
+  width: calc(256px - 8px - 8px);
+  padding: 4px 8px;
+  align-items: center;
+  overflow-x: hidden;
+
+  &__name {
+    padding: 4px;
+    flex: 1;
+  }
+
+  &__color {
+    width: 16px;
+    height: 16px;
+    border-radius: 8px;
+    margin: 4px;
+    margin-left: 8px;
+  }
 }
 
 .user {
@@ -92,7 +125,6 @@ html, body {
 }
 
 .drawer {
-  overflow-x: hidden;
   background: rgb(244, 245, 247);
   position: static;
   height: 100%;
@@ -100,6 +132,8 @@ html, body {
   left: 48px;
   box-shadow: 2px 0px 1px #ccc;
   transition: width 150ms ease;
+  display: flex;
+  flex-direction: column;
 
   &--enter:not(&--enter-active), &--exit-active {
     width: 0px !important;
@@ -129,8 +163,10 @@ html, body {
   }
 
   &__content {
-    padding-left: 8px;
-    padding-right: 8px;
+    flex: 1;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
   }
 }
 
@@ -281,6 +317,7 @@ html, body {
   width: 24px;
   height: 24px;
   cursor: pointer;
+  background: transparent;
 
   @include hover-support {
     background: lightgray;
