@@ -1,1 +1,1 @@
-exports.logoSVG = require("url:/logo.svg");
+exports.logoSVG = require("url:/src/logo.svg");

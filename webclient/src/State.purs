@@ -1,6 +1,7 @@
 module Homotopy.Webclient.State where
 
 import Prelude
+import Data.Array as Array
 import Data.Foldable (all, foldr)
 import Data.Lens (Lens', Traversal', _Just)
 import Data.Lens as Lens
@@ -8,7 +9,11 @@ import Data.Lens.At (at)
 import Data.List (List(..), (:))
 import Data.List as List
 import Data.Map (Map)
+import Data.Map as Map
 import Data.Maybe (Maybe(..), fromJust)
+import Data.Newtype (unwrap)
+import Data.Set as Set
+import Data.Tuple.Nested ((/\), type (/\))
 import Effect (Effect)
 import Homotopy.Core.Common (Boundary(..), Generator(..), Height(..), SliceIndex(..))
 import Homotopy.Core.Diagram (Diagram(..), DiagramN)
@@ -21,6 +26,7 @@ type State
     , project :: Project
     , view :: Maybe View
     , workspace :: Maybe Workspace
+    , boundary :: Maybe (Boundary /\ Diagram)
     }
 
 type Workspace
@@ -35,6 +41,7 @@ type Signature
 type GeneratorInfo
   = { name :: String
     , color :: String
+    , diagram :: Diagram
     }
 
 type Project
@@ -63,6 +70,7 @@ data Action
   | ClearWorkspace
   | IdentityDiagram
   | MakeBoundary Boundary
+  | MakeGenerator
   | RestrictDiagram
 
 -------------------------------------------------------------------------------
@@ -88,6 +96,7 @@ initial =
         { path: Nil
         , diagram: DiagramN associativity
         }
+  , boundary: Nothing
   }
 
 -------------------------------------------------------------------------------
@@ -118,21 +127,81 @@ reduce action = case action of
       , path: workspace.path
       }
   --
-  MakeBoundary boundary -> \state -> state -- TODO
+  MakeGenerator -> makeGenerator Nothing
   --
-  RestrictDiagram ->
-    Lens.over (R.workspace <<< _Just) \workspace ->
-      let
-        isNonSingular = case _ of
-          Interior (Singular _) -> false
-          _ -> true
+  MakeBoundary boundary -> makeBoundary boundary
+  --
+  RestrictDiagram -> restrictDiagram
 
-        sliceAt i d = unsafePartial $ fromJust $ Diagram.sliceAt (Diagram.toDiagramN d) i
-      in
-        if all isNonSingular workspace.path then
-          { diagram: foldr sliceAt workspace.diagram workspace.path, path: Nil }
-        else
-          workspace
+-------------------------------------------------------------------------------
+nextGenerator :: Int -> State -> Generator
+nextGenerator dimension state = Generator { id: go 0, dimension }
+  where
+  ids = Set.map (\(Generator g) -> g.id) $ Map.keys $ state.signature.generators
+
+  go id = if id `Set.member` ids then id else go (id + 1)
+
+-------------------------------------------------------------------------------
+baseColors :: Array String
+baseColors =
+  [ "#2980b9" -- belize blue
+  , "#c0392b" -- pomegranate
+  , "#f39c12" -- orange
+  , "#8e44ad" -- wisteria
+  , "#27ae60" -- nephritis
+  , "#f1c40f" -- sunflower
+  , "#ffffff" -- white
+  , "#000000" -- black
+  ]
+
+makeGenerator :: Maybe (Diagram /\ Diagram) -> State -> State
+makeGenerator boundary state = Lens.setJust (_generator generator) info state
+  where
+  generator@(Generator { id }) = nextGenerator 0 state
+
+  name = "Cell " <> show id
+
+  color = unsafePartial $ fromJust $ baseColors Array.!! (id `mod` Array.length baseColors)
+
+  diagram = case boundary of
+    Nothing -> Diagram0 generator
+    Just (source /\ target) -> DiagramN (Diagram.fromGenerator source target generator)
+
+  info = { name, color, diagram }
+
+makeBoundary :: Boundary -> State -> State
+makeBoundary boundary state = case state.workspace of
+  Nothing -> state
+  Just workspace -> case boundary, state.boundary of
+    Source, Just (Target /\ target) ->
+      state
+        # _ { workspace = Nothing, boundary = Nothing }
+        # makeGenerator (Just (workspace.diagram /\ target))
+    Target, Just (Source /\ source) ->
+      state
+        # _ { workspace = Nothing, boundary = Nothing }
+        # makeGenerator (Just (source /\ workspace.diagram))
+    _, _ ->
+      state
+        { workspace = Nothing
+        , boundary = Just (boundary /\ workspace.diagram)
+        }
+
+-------------------------------------------------------------------------------
+restrictDiagram :: State -> State
+restrictDiagram =
+  Lens.over (R.workspace <<< _Just) \workspace ->
+    let
+      isNonSingular = case _ of
+        Interior (Singular _) -> false
+        _ -> true
+
+      sliceAt i d = unsafePartial $ fromJust $ Diagram.sliceAt (Diagram.toDiagramN d) i
+    in
+      if all isNonSingular workspace.path then
+        { diagram: foldr sliceAt workspace.diagram workspace.path, path: Nil }
+      else
+        workspace
 
 -------------------------------------------------------------------------------
 type Store
