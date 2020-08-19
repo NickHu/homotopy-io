@@ -32,8 +32,9 @@ main = do
       c' = { index: 4, source : c2Source, target: unsafeCoerce unit, slices: unsafeCoerce unit }
       coneList = c' : c : Nil
       targetList = 4 : 1 : Nil
-    shouldEqual (listConeTargets coneList) targetList
-
+    shouldEqual (targets coneList) targetList
+  -}
+  {-
   it "testing removeCone" do
     let
       cSource = (unsafeCoerce unit : unsafeCoerce unit : Nil)

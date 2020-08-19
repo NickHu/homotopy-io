@@ -1,13 +1,16 @@
 module Homotopy.Core.Rewrite where
 
 -- TODO: explicitly specify exports
+
 import Data.List
 import Data.Maybe
 import Data.Tuple
 import Homotopy.Core.Common
 import Partial.Unsafe
 import Prelude
+
 import Control.Comonad.Cofree (tail)
+import Data.Foldable (foldl)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Newtype (traverse)
@@ -101,16 +104,41 @@ cospanPad p { forward: fw, backward: bw } =
   , backward: pad p bw
   }
 
--- | Removes a cone with given singular target index, without reindexing other cones
+-- | Given a rewrite, removes a cone at a given singular target index (if present), without reindexing other cones
+{-
 removeCone :: Partial => Rewrite -> Int -> List Cone
 removeCone (RewriteN { dimension: dim, cones }) i =
   map fst
-    $ filter
-        (\(Tuple _ t) -> i /= t)
+    $ filter (\(Tuple _ t) -> i /= t)
     $ zip cones (targets (RewriteN { dimension: dim, cones }))
+-}
 
--- | Removes a cone with given singular target index, and reindex other cones
---removeConeReindex :: List Cone -> Int -> List Cone
+-- | Given a rewrite, removes a cone at a given singular target index (if present), without reindexing other cones
+removeCone :: Partial => Rewrite -> Int -> List Cone
+removeCone (RewriteN { dimension: _, cones }) i = go 0 cones
+    where
+    go :: Int -> List Cone -> List Cone -- offset, input list, output list
+    go offset Nil = Nil
+    go offset (c : cs)
+      | i == c.index + offset = cs -- just drop c, and we're done
+      | i < c.index + offset = (c : cs) -- no matching cone, nothing to do
+      | otherwise = c : (go (offset + 1 - length c.source) cs) -- keep looking for the cone
+
+-- | Given a rewrite, removes a cone at a given target index (if present), and reindexes later cones accordingly
+removeConeReindex :: Partial => Rewrite -> Int -> List Cone
+removeConeReindex (RewriteN { dimension: _, cones }) i = go 0 cones
+    where
+    go :: Int -> List Cone -> List Cone -- offset, input list, output list
+    go offset Nil = Nil
+    go offset (c : cs)
+      | i == c.index + offset = map (\d -> { index : d.index + 1 - length c.source, source: d.source, target: d.target, slices: d.slices }) cs -- just drop c, and we're done
+      | i < c.index + offset = (c : cs) -- we've missed the cone
+      | otherwise = c : (go (offset + 1 - length c.source) cs) -- keep looking for the cone
+        where
+        shift :: Int
+        shift = 1 - length c.source
+
+-- | Reverse a cospan
 cospanReverse :: Cospan -> Cospan
 cospanReverse cospan = { forward: cospan.backward, backward: cospan.forward }
 
