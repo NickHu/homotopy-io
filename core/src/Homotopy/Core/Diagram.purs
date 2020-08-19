@@ -9,6 +9,7 @@ module Homotopy.Core.Diagram
   , fromGenerator
   , identity
   , internalizeHeight
+  , make
   , regularSlices
   , singularSlices
   , size
@@ -22,22 +23,23 @@ module Homotopy.Core.Diagram
   , rewriteBackward
   ) where
 
-import Control.MonadPlus (guard)
+import Control.MonadZero (empty, guard, (>>=))
 import Data.Eq ((/=))
-import Data.Foldable (length)
+import Data.Foldable (foldM, foldl, length)
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Hashable (class Hashable, hash)
 import Data.Lazy (Lazy, defer, force)
-import Data.List (List(..), concatMap, drop, head, mapWithIndex, reverse, tail, take, (:))
+import Data.List (List(..), concatMap, drop, head, index, mapWithIndex, reverse, slice, tail, take, (:))
 import Data.List.NonEmpty (NonEmptyList(..), scanl)
 import Data.List.NonEmpty as NEL
-import Data.Maybe (Maybe(..), fromMaybe, maybe)
+import Data.Maybe (Maybe(..), fromMaybe, isJust, maybe)
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.NonEmpty ((:|))
+import Data.Tuple (Tuple(..), fst)
 import Data.Unfoldable (replicate)
 import Homotopy.Core.Common (Boundary(..), Generator, Height(..), SliceIndex(..))
-import Homotopy.Core.Rewrite (Cone, Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse, makeRewriteN)
+import Homotopy.Core.Rewrite (Cospan, Rewrite(..), coneSize, cospanPad, cospanReverse, makeRewriteN)
 import Partial.Unsafe (unsafePartial)
 import Prelude (class Eq, class Show, Ordering(..), bind, compare, discard, join, map, otherwise, pure, ($), (&&), (*), (+), (-), (<), (<<<), (<>), (==), (>), (>=), (>>>))
 import Unsafe.Reference (unsafeRefEq)
@@ -67,6 +69,8 @@ derive instance genericDiagramN :: Generic DiagramN _
 
 derive newtype instance showDiagramN :: Show DiagramN
 
+-- | Construct a `DiagramN` from a source `Diagram` and a list of `Cospan`s. No
+-- | validation is performed on the input.
 unsafeMake :: Diagram -> List Cospan -> DiagramN
 unsafeMake s cs =
   InternalDiagram
@@ -74,6 +78,20 @@ unsafeMake s cs =
     , cospans: cs
     , hash: defer \_ -> hash { source: s, cospans: cs }
     }
+
+-- | Try to construct a `DiagramN` from a source `Diagram` and a list of
+-- | `Cospan`s (smart constructor).
+make :: Partial => Diagram -> List Cospan -> Maybe DiagramN
+make s cs
+  | isJust
+      $ foldM
+          ( \r { forward: f, backward: b } -> do
+              sh <- safeRewriteForward f r
+              safeRewriteBackward b sh
+          )
+          s
+          (cs) = pure $ unsafeMake s cs
+  | otherwise = empty
 
 toDiagramN :: Partial => Diagram -> DiagramN
 toDiagramN (DiagramN d) = d
@@ -145,36 +163,97 @@ source (InternalDiagram d) = d.source
 target :: DiagramN -> Diagram
 target = slices >>> NEL.last
 
--- | The the slices of an (n + 1)-dimensional diagram.
+-- | The slices of an (n + 1)-dimensional diagram.
 slices :: DiagramN -> NonEmptyList Diagram
 slices d = unsafePartial $ NonEmptyList (source d :| scanl (\s r -> r s) (source d) (concatMap genRewrites (cospans d)))
   where
   genRewrites :: Partial => Cospan -> List (Diagram -> Diagram)
   genRewrites { forward: fw, backward: bw } = rewriteForward fw : rewriteBackward bw : Nil
 
+-- | Compute a forward `Rewrite` as a `Diagram -> Diagram` function.
+-- |
+-- | In a diagram, given a forward rewrite `fᵢ` and a regular level `rᵢ`,
+-- | `rewriteForward fᵢ rᵢ` yields `sᵢ`: the subsequent singular level.
 rewriteForward :: Partial => Rewrite -> Diagram -> Diagram
 rewriteForward (Rewrite0 rewrite) (Diagram0 _) = Diagram0 rewrite.target
 
 rewriteForward RewriteI (Diagram0 g) = Diagram0 g
 
-rewriteForward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
-  where
-  go :: List Cospan -> Int -> List Cone -> List Cospan
-  go cspans _ Nil = cspans
+rewriteForward (RewriteN { cones }) (DiagramN d') =
+  DiagramN $ unsafeMake (source d')
+    $ fst
+    $ foldl
+        ( \(Tuple cspans i) c ->
+            let
+              start = c.index + i
 
-  go cspans i (c : cs) = go (take (c.index + i) cspans <> c.target : drop (c.index + i + coneSize c) cspans) (i - coneSize c + 1) cs
+              end = start + coneSize c
+            in
+              Tuple
+                (take start cspans <> c.target : drop end cspans)
+                (i - coneSize c + 1)
+        )
+        (Tuple (cospans d') 0)
+        cones
 
+-- | Compute a backward `Rewrite` as a `Diagram -> Diagram` function.
+-- |
+-- | In a diagram, given a backward rewrite `bᵢ₊₁` and a regular level `rᵢ`,
+-- | `rewriteBackward bᵢ₊₁ rᵢ` yields `sᵢ`: the subsequent singular level
+-- | (rewriting happens in the *opposite* direction to the rewrite itself).
 rewriteBackward :: Partial => Rewrite -> Diagram -> Diagram
 rewriteBackward (Rewrite0 rewrite) (Diagram0 _) = Diagram0 rewrite.source
 
 rewriteBackward RewriteI (Diagram0 g) = Diagram0 g
 
-rewriteBackward (RewriteN { cones }) (DiagramN d') = DiagramN $ unsafeMake (source d') (go (cospans d') 0 cones)
-  where
-  go :: List Cospan -> Int -> List Cone -> List Cospan
-  go cspans _ Nil = cspans
+rewriteBackward (RewriteN { cones }) (DiagramN d') =
+  DiagramN $ unsafeMake (source d')
+    $ fst
+    $ foldl
+        ( \(Tuple cspans i) c ->
+            let
+              start = c.index + i
+            in
+              Tuple
+                (take start cspans <> c.source <> drop (start + 1) cspans)
+                (i + coneSize c - 1)
+        )
+        (Tuple (cospans d') 0)
+        cones
 
-  go cspans i (c : cs) = go (take (c.index + i) cspans <> c.source <> drop (c.index + i + 1) cspans) (i + coneSize c - 1) cs
+-- same as `rewriteForward`, but also checks that the deleted cospans are the same source cospans in the cone
+safeRewriteForward :: Partial => Rewrite -> Diagram -> Maybe Diagram
+safeRewriteForward (RewriteN { cones }) (DiagramN d) =
+  foldM
+    ( \(Tuple cspans i) c -> do
+        let
+          start = c.index + i
+
+          end = start + coneSize c
+        guard (slice start end cspans == c.source)
+        pure $ Tuple (take start cspans <> c.target : drop end cspans) (i - coneSize c + 1)
+    )
+    (Tuple (cospans d) 0)
+    cones
+    >>= (fst >>> unsafeMake (source d) >>> DiagramN >>> pure)
+
+safeRewriteForward r d = pure $ rewriteForward r d
+
+-- same as `rewriteBackward`, but also checks that the deleted cospan is the same target cospan in the cone
+safeRewriteBackward :: Partial => Rewrite -> Diagram -> Maybe Diagram
+safeRewriteBackward (RewriteN { cones }) (DiagramN d) =
+  foldM
+    ( \(Tuple cspans i) c -> do
+        let
+          start = c.index + i
+        guard (index cspans start == (pure $ c.target))
+        pure $ Tuple (take start cspans <> c.source <> drop (start + 1) cspans) (i + coneSize c - 1)
+    )
+    (Tuple (cospans d) 0)
+    cones
+    >>= (fst >>> unsafeMake (source d) >>> DiagramN >>> pure)
+
+safeRewriteBackward r d = pure $ rewriteBackward r d
 
 -- | The slice of an (n + 1)-dimensional diagram at a particular height.
 sliceAt :: DiagramN -> SliceIndex -> Maybe Diagram

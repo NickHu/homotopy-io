@@ -1,16 +1,19 @@
 module Test.Diagram where
 
 import Control.Monad.Error.Class (class MonadThrow, throwError)
+import Control.MonadZero (empty)
 import Data.Array as Array
 import Data.Foldable (for_)
 import Data.List (List(..), (:))
-import Data.Maybe (Maybe(..), isNothing)
+import Data.Maybe (Maybe(..), fromJust, isNothing)
 import Data.Tuple (Tuple(..))
 import Data.Tuple.Nested ((/\))
 import Effect.Exception (Error, error)
 import Homotopy.Core.Common (Boundary(..), Generator(..), Height(..), SliceIndex(..))
-import Homotopy.Core.Diagram (Diagram(..), attach)
+import Homotopy.Core.Diagram (Diagram(..), attach, fromGenerator, make)
 import Homotopy.Core.Diagram as Diagram
+import Homotopy.Core.Rewrite (Rewrite(..), makeRewriteN)
+import Partial.Unsafe (unsafePartial)
 import Prelude (Unit, bind, discard, map, mod, pure, ($), (-), (/), (==))
 import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual)
@@ -38,6 +41,202 @@ tryMaybe message Nothing = throwError (error message)
 
 main :: Spec Unit
 main = do
+  describe "smart constructor" do
+    let
+      s = Generator { id: 0, dimension: 0 }
+
+      -- -> x <-
+      x = Generator { id: 1, dimension: 1 }
+
+      -- -> y <-
+      y = Generator { id: 2, dimension: 1 }
+
+      -- x
+      -- |
+      -- f
+      -- |
+      -- x
+      f = Generator { id: 3, dimension: 2 }
+
+      -- y
+      -- |
+      -- g
+      -- |
+      -- y
+      g = Generator { id: 4, dimension: 2 }
+
+      space = Diagram0 s
+
+      xwire = fromGenerator space space x
+
+      ywire = fromGenerator space space y
+
+      sxs = { forward: Rewrite0 { source: s, target: x }, backward: Rewrite0 { source: s, target: x } }
+
+      sys = { forward: Rewrite0 { source: s, target: y }, backward: Rewrite0 { source: s, target: y } }
+
+      sfs = { forward: Rewrite0 { source: s, target: f }, backward: Rewrite0 { source: s, target: f } }
+
+      sgs = { forward: Rewrite0 { source: s, target: g }, backward: Rewrite0 { source: s, target: g } }
+
+      xtof = Rewrite0 { source: x, target: f }
+
+      ytog = Rewrite0 { source: x, target: g }
+
+      xy = unsafePartial $ fromJust $ attach Target Nil xwire ywire
+    it "accepts compatible cospans" do
+      -- x
+      -- |
+      -- f
+      -- |
+      -- f
+      -- |
+      -- x
+      unsafePartial
+        $ make (DiagramN xwire)
+            ( { forward:
+                  makeRewriteN 1
+                    ( { index: 0
+                      , source: sxs : Nil
+                      , target: sfs
+                      , slices: xtof : Nil
+                      }
+                        : Nil
+                    )
+              , backward:
+                  makeRewriteN 1
+                    ( { index: 0
+                      , source: sxs : Nil
+                      , target: sfs
+                      , slices: xtof : Nil
+                      }
+                        : Nil
+                    )
+              }
+                : { forward:
+                      makeRewriteN 1
+                        ( { index: 0
+                          , source: sxs : Nil
+                          , target: sfs
+                          , slices: xtof : Nil
+                          }
+                            : Nil
+                        )
+                  , backward:
+                      makeRewriteN 1
+                        ( { index: 0
+                          , source: sxs : Nil
+                          , target: sfs
+                          , slices: xtof : Nil
+                          }
+                            : Nil
+                        )
+                  }
+                : Nil
+            )
+            `shouldEqual`
+              (let d = fromGenerator (DiagramN xwire) (DiagramN xwire) f in attach Target Nil d d)
+    it "fails when forward and backward rewrites do not agree (singular heights are not well-defined)" do
+      -- y x
+      -- | |
+      -- ? ?
+      -- | |
+      -- x y
+      unsafePartial
+        $ make (DiagramN xy)
+            ( { forward:
+                  makeRewriteN 1
+                    ( ( { index: 0
+                        , source: sxs : Nil
+                        , target: sfs
+                        , slices: xtof : Nil
+                        }
+                          : { index: 1
+                            , source: sys : Nil
+                            , target: sgs
+                            , slices: ytog : Nil
+                            }
+                          : Nil
+                      )
+                    )
+              , backward:
+                  makeRewriteN 1
+                    ( ( { index: 0
+                        , source: sys : Nil
+                        , target: sgs
+                        , slices: ytog : Nil
+                        }
+                          : { index: 1
+                            , source: sxs : Nil
+                            , target: sfs
+                            , slices: xtof : Nil
+                            }
+                          : Nil
+                      )
+                    )
+              }
+                : Nil
+            )
+            `shouldEqual`
+              empty
+    it "fails when cospans do not compose (regular heights are not well-defined)" do
+      -- y
+      -- |
+      -- g
+      -- |
+      -- ?
+      -- |
+      -- f
+      -- |
+      -- x
+      unsafePartial
+        $ make (DiagramN xwire)
+            ( { forward:
+                  makeRewriteN 1
+                    ( ( { index: 0
+                        , source: sxs : Nil
+                        , target: sfs
+                        , slices: xtof : Nil
+                        }
+                          : Nil
+                      )
+                    )
+              , backward:
+                  makeRewriteN 1
+                    ( ( { index: 0
+                        , source: sxs : Nil
+                        , target: sfs
+                        , slices: xtof : Nil
+                        }
+                          : Nil
+                      )
+                    )
+              }
+                : { forward:
+                      makeRewriteN 1
+                        ( ( { index: 0
+                            , source: sys : Nil
+                            , target: sgs
+                            , slices: ytog : Nil
+                            }
+                              : Nil
+                          )
+                        )
+                  , backward:
+                      makeRewriteN 1
+                        ( ( { index: 0
+                            , source: sys : Nil
+                            , target: sgs
+                            , slices: ytog : Nil
+                            }
+                              : Nil
+                          )
+                        )
+                  }
+                : Nil
+            )
+            `shouldEqual`
+              empty
   describe "1-d composition" do
     let
       x = Generator { id: 0, dimension: 0 }
