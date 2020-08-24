@@ -11,3 +11,5 @@
 /*/.cache
 /*/dist
 /*/tags
+tags
+.direnv/
