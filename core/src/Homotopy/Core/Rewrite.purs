@@ -1,6 +1,9 @@
 module Homotopy.Core.Rewrite where
 
 -- TODO: explicitly specify exports
+
+import Prelude
+
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Hashable (class Hashable, hash)
@@ -10,7 +13,7 @@ import Data.Maybe (fromJust)
 import Homotopy.Core.Common (SliceIndex(..), Height(..), Generator)
 import Homotopy.Core.Interval (Interval(..))
 import Homotopy.Core.Interval as Interval
-import Prelude
+import Partial (crashWith)
 import Unsafe.Reference (unsafeRefEq)
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
@@ -193,19 +196,22 @@ transportCoordinates lim (Interior (Regular p) : ps) =
     $ Interval.toUnfoldable
     $ regularPreimage lim p
 
--- | Composition of rewrites.
+-- | Composition of rewrites in diagrammatic order.
 -- |
 -- | Rewrites of the same dimension and with given source and target diagrams
 -- | form a category. In this library, rewrites do not specify their source,
 -- | target or dimension in their type or at runtime, so the category of
 -- | rewrites is instead presented as a partial semigroup.
 instance rewriteSemigroup :: Partial => Semigroup Rewrite where
+  append RewriteI r@(Rewrite0 _) = r
+  append r@(Rewrite0 _) RewriteI = r
   append (Rewrite0 { source: fs, target: ft }) (Rewrite0 { source: gs, target: gt })
     | ft == gs = Rewrite0 { source: fs, target: gt }
-  append (RewriteN { dimension: fd, cones: fcs }) (RewriteN { dimension: gd, cones: gcs })
+    | otherwise = crashWith "Uncomposable 0-rewrites"
+  append r@(RewriteN { dimension: fd, cones: fcs }) r'@(RewriteN { dimension: gd, cones: gcs })
     | fd == gd = makeRewriteN fd (composeCones 0 fcs gcs)
       where
-      composeCones :: Int -> List Cone -> List Cone -> List Cone
+      composeCones :: Partial => Int -> List Cone -> List Cone -> List Cone
       composeCones _ cs Nil = cs
 
       composeCones i Nil (c : cs) = c { index = c.index + i } : composeCones i Nil cs
@@ -226,3 +232,6 @@ instance rewriteSemigroup :: Partial => Semigroup Rewrite where
                 }
                   : c's
               )
+          | otherwise -> crashWith $ "Cannot compose cone\n" <> show c <> "\nwith cone\n" <> show c' <> "\nwhile trying to compose\n" <> show r <> "\nwith\n" <> show r'
+    | otherwise = crashWith $ "Cannot compose " <> show fd <> "-rewrite with " <> show gd <> "-rewrite"
+  append r r' = crashWith $ "Cannot compose\n" <> show r <> "\nwith\n" <> show r'
