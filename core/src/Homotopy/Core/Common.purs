@@ -10,15 +10,18 @@ import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
 import Data.Hashable (class Hashable)
 import Data.Maybe (Maybe(..))
+import Data.Newtype (class Newtype)
 import Data.Tuple (Tuple(..))
 import Prelude (class Bounded, class Eq, class Ord, class Show, compare, show, (*), (+), (-), (<>))
 
 newtype Generator
   = Generator { id :: Int, dimension :: Int }
 
-derive instance eqGenerator :: Eq Generator
+derive instance newtypeGenerator :: Newtype Generator _
 
-derive instance ordGenerator :: Ord Generator
+derive newtype instance eqGenerator :: Eq Generator
+
+derive newtype instance ordGenerator :: Ord Generator
 
 derive instance genericGenerator :: Generic Generator _
 

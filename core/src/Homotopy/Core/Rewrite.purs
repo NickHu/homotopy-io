@@ -95,7 +95,7 @@ coneSize :: Cone -> Int
 coneSize { source } = length source
 
 slice :: Partial => Rewrite -> Int -> Rewrite
-slice (RewriteN { dimension: dim, cones }) height =
+slice (RewriteN { cones }) height =
   fromJust
     $ findMap (\c -> c.slices !! (height - c.index)) cones
 
@@ -131,6 +131,11 @@ cospanPad p { forward: fw, backward: bw } =
 cospanReverse :: Cospan -> Cospan
 cospanReverse cospan = { forward: cospan.backward, backward: cospan.forward }
 
+-- | Get the monotone function in $\Delta_+$ corresponding to a rewrite.
+-- |
+-- | `singularImage rewrite` yields a function determines where each singular
+-- | height is sent; i.e.\ each singular height `i` is mapped to `singularImage
+-- | rewrite i` by `rewrite`.
 singularImage :: Partial => Rewrite -> Int -> Int
 singularImage (RewriteN { cones }) h = go 0 cones
   where

@@ -1,0 +1,24 @@
+\documentclass[tikz]{standalone}
+\usepackage{unicode-math}
+\usetikzlibrary{positioning}
+\begin{document}
+  \begin{tikzpicture}
+    \node (s0) {$s₀$};
+    \node[above = of s0] (s1) {$s₁$};
+    \node[above = of s1] (s2) {$s₂$};
+    \node[above = of s2] (s3) {$s₃$};
+    \node[above = of s3] (s4) {$s₄$};
+
+    \node[right = of s0] (s'0) {$s′₀$};
+    \node[above = of s'0] (s'1) {$s′₁$};
+    \node[above = of s'1] (s'2) {$s′₂$};
+    \node[above = of s'2] (s'3) {$s′₃$};
+    \node[above = of s'3] (s'4) {$s′₄$};
+
+    \draw[->] (s0) -- (s'0);
+    \draw[->] (s1) -- (s'1);
+    \draw[->] (s2) -- (s'1);
+    \draw[->] (s3) -- (s'2);
+    \draw[->] (s4) -- (s'4);
+  \end{tikzpicture}
+\end{document}
