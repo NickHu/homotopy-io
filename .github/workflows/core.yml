@@ -1,0 +1,36 @@
+name: Core CI
+
+on:
+  push:
+    paths:
+    - 'core/**.purs'
+  pull_request:
+    paths:
+    - 'core/**.purs'
+
+jobs:
+  core:
+    name: Core
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up a PureScript toolchain
+        uses: purescript-contrib/setup-purescript@v1
+
+      - name: Cache PureScript dependencies
+        uses: actions/cache@v2
+        with:
+          key: ${{ runner.os }}-spago-${{ hashFiles('core/**/*.dhall') }}
+          path: |
+            core/.spago
+            core/output
+
+      - name: Build with spago
+        run: spago build
+        working-directory: core
+
+      - name: Test with spago
+        run: spago test --no-install
+        working-directory: core
