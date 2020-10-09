@@ -1,4 +1,4 @@
-module Homotopy.Core.Interval (Interval(..), toUnfoldable) where
+module Homotopy.Core.Interval (Interval(..), toUnfoldable, intervalStart, intervalLength) where
 
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
@@ -10,6 +10,12 @@ import Prelude (class Eq, class Show, otherwise, (+), (-), (<<<), (==))
 
 newtype Interval
   = Interval { start :: Int, length :: Int }
+
+intervalStart :: Interval -> Int
+intervalStart (Interval { start }) = start
+
+intervalLength :: Interval -> Int
+intervalLength (Interval { length }) = length
 
 derive newtype instance eqInterval :: Eq Interval
 

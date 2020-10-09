@@ -1,22 +1,18 @@
 module Homotopy.Core.Rewrite where
 
 -- TODO: explicitly specify exports
-
-import Data.List
-import Data.Maybe
-import Data.Tuple
-import Homotopy.Core.Common
-import Partial.Unsafe
-import Prelude
-
-import Control.Comonad.Cofree (tail)
-import Data.Foldable (foldl)
+import Control.Apply ((<*>))
 import Data.Generic.Rep (class Generic)
 import Data.Generic.Rep.Show (genericShow)
-import Data.Newtype (traverse)
+import Data.List (List(..), drop, findMap, length, take, (!!), (:))
+import Data.Maybe (Maybe(..), fromJust)
 import Data.Traversable (mapAccumL)
-import Homotopy.Core.Interval (Interval(..))
+import Data.Tuple (Tuple(..))
+import Data.Unfoldable (fromMaybe)
+import Homotopy.Core.Common (Generator, Height(..), SliceIndex(..))
+import Homotopy.Core.Interval (Interval(..), intervalStart, intervalLength)
 import Homotopy.Core.Interval as Interval
+import Prelude (class Eq, class Semigroup, class Show, Ordering(..), compare, map, otherwise, ($), (+), (-), (<), (<>), (==), (>=))
 
 -- | An n-dimensional rewrite is a sparsely encoded transformation of
 -- | n-dimensional diagrams. Rewrites can contract parts of a diagram and
@@ -104,6 +100,9 @@ cospanPad p { forward: fw, backward: bw } =
   , backward: pad p bw
   }
 
+myinterval :: Interval
+myinterval = Interval { start: 1, length: 3 }
+
 -- | Given a rewrite, removes a cone at a given singular target index (if present), without reindexing other cones
 {-
 removeCone :: Partial => Rewrite -> Int -> List Cone
@@ -112,31 +111,59 @@ removeCone (RewriteN { dimension: dim, cones }) i =
     $ filter (\(Tuple _ t) -> i /= t)
     $ zip cones (targets (RewriteN { dimension: dim, cones }))
 -}
+getExpansionData :: Partial => Cospan -> Int -> Tuple Cospan Cospan
+getExpansionData { forward: RewriteN { cones: cf, dimension: dim }, backward: RewriteN { cones: cb } } i =
+  Tuple
+    { forward: RewriteN { cones: fromMaybe cone_f, dimension: dim }
+    , backward: RewriteN { cones: fromMaybe (Just (\c -> c { index = (intervalStart preimage_f) }) <*> cone_b), dimension: dim }
+    }
+    { forward: RewriteN { cones: removeConeReindex cf i (intervalLength preimage_f), dimension: dim }
+    , backward: RewriteN { cones: removeCone cb i, dimension: dim }
+    }
+  where
+  preimage_f = (singularPreimageListCone i cf)
 
--- | Given a rewrite, removes a cone at a given singular target index (if present), without reindexing other cones
-removeCone :: Partial => Rewrite -> Int -> List Cone
-removeCone (RewriteN { dimension: _, cones }) i = go 0 cones
-    where
-    go :: Int -> List Cone -> List Cone -- offset, input list, output list
-    go offset Nil = Nil
-    go offset (c : cs)
-      | i == c.index + offset = cs -- just drop c, and we're done
-      | i < c.index + offset = (c : cs) -- no matching cone, nothing to do
-      | otherwise = c : (go (offset + 1 - length c.source) cs) -- keep looking for the cone
+  cone_b = extractCone cb i
+
+  cone_f = extractCone cf i
+
+-- | Given a rewrite, removes a cone at a given singular target index, if present
+removeCone :: List Cone -> Int -> List Cone
+removeCone cones i = go 0 cones
+  where
+  go :: Int -> List Cone -> List Cone -- offset, input list, output list
+  go offset Nil = Nil
+
+  go offset (c : cs)
+    | i == c.index + offset = cs -- just drop c, and we're done
+    | i < c.index + offset = (c : cs) -- no matching cone, nothing to do
+    | otherwise = c : (go (offset + 1 - length c.source) cs) -- keep looking for the cone
+
+-- | Given a rewrite, returns a cone at a given singular target index, if present
+extractCone :: List Cone -> Int -> Maybe Cone
+extractCone cones i = go 0 cones
+  where
+  go :: Int -> List Cone -> Maybe Cone -- offset, input list, output list
+  go offset Nil = Nothing -- no matching cone
+
+  go offset (c : cs)
+    | i == c.index + offset = Just c -- just drop c, and we're done
+    | i < c.index + offset = Nothing -- no matching cone exists
+    | otherwise = go (offset + 1 - length c.source) cs -- keep looking for the cone
 
 -- | Given a rewrite, removes a cone at a given target index (if present), and reindexes later cones accordingly
-removeConeReindex :: Partial => Rewrite -> Int -> List Cone
-removeConeReindex (RewriteN { dimension: _, cones }) i = go 0 cones
+removeConeReindex :: List Cone -> Int -> Int -> List Cone -- cones, index to removal, reindexing parameter
+removeConeReindex cones i reindex = go 0 cones
+  where
+  go :: Int -> List Cone -> List Cone -- offset, input list
+  go offset Nil = Nil
+
+  go offset (c : cs) = case (compare i (c.index + offset)) of
+    EQ -> reindexer cs -- drop c and reindex the rest
+    LT -> reindexer (c : cs) -- there's no matching cone, so reindex the whole thing
+    GT -> c : (go (offset + 1 - length c.source) cs) -- keep searching
     where
-    go :: Int -> List Cone -> List Cone -- offset, input list, output list
-    go offset Nil = Nil
-    go offset (c : cs)
-      | i == c.index + offset = map (\d -> { index : d.index + 1 - length c.source, source: d.source, target: d.target, slices: d.slices }) cs -- just drop c, and we're done
-      | i < c.index + offset = (c : cs) -- we've missed the cone
-      | otherwise = c : (go (offset + 1 - length c.source) cs) -- keep looking for the cone
-        where
-        shift :: Int
-        shift = 1 - length c.source
+    reindexer = map (\d -> d { index = d.index + reindex - length c.source })
 
 -- | Reverse a cospan
 cospanReverse :: Cospan -> Cospan
@@ -154,7 +181,10 @@ singularImage (RewriteN { cones }) h = go 0 cones
     | otherwise = go (i + 1 - coneSize c) cs
 
 singularPreimage :: Partial => Rewrite -> Int -> Interval
-singularPreimage (RewriteN { cones }) h = go 0 cones
+singularPreimage (RewriteN { cones }) h = singularPreimageListCone h cones
+
+singularPreimageListCone :: Int -> List Cone -> Interval
+singularPreimageListCone h cones = go 0 cones
   where
   go :: Int -> List Cone -> Interval
   go i Nil = Interval { start: h - i, length: 1 }
