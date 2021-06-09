@@ -1,3 +1,6 @@
+# ARCHIVED
+
+We started again in Rust: https://github.com/homotopy-io/homotopy-rs.
 
 # Build instructions
 
